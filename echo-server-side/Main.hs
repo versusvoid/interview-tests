@@ -1,87 +1,92 @@
 {-# LANGUAGE BangPatterns, OverloadedStrings #-}
-import qualified Data.List      as L
-import qualified Data.ByteString as B
+import           Data.List
+import qualified Data.ByteString as B()
 import           Network.Socket hiding (send, sendTo, recv, recvFrom)
 import           Network.Socket.ByteString
-import           Network.BSD 
 import           Data.Maybe as MB
-import           System.Environment(getArgs) as Env
+import           System.Environment as Env(getArgs)
 import           System.Exit(exitFailure)
 import           System.Time
 import           Control.Monad
-import           Control.Concurrent
-
-data Message = Ping | Alive | FineThanks | IMTheKing
-    deriving (Eq, Show, Ord, Enum)
-
-enumToMessageList = 
-    [
-        (Ping, "PING"), (Alive, "ALIVE?"), 
-        (FineThanks, "FINETHANKS"), 
-        (IMTheKing, "IMTHEKING")
-    ]
-
-enumToMessage = fromJust . flip lookup enumToMessageList
-
-messageToEnumList = map (\(x,y) -> (y,x)) enumToMessageList
-
-messageToEnum = fromJust . flip lookup messageToEnumList
 
 data NodeHandle = 
-     NodeHandle {nhSocket  :: Socket,
+     NodeHandle {nhSock    :: Socket,
                  nhId      :: Int,
-                 nhAddress :: SockAddr,
                  nhNodes   :: [(Int, SockAddr)],
                  nhKing    :: Int
                 } 
+
 microSecDelay = 1000*1000
-delayDiff = normalizeTimeDiff $ TimeDiff{tdPicosec = microSecDelay*1000000}
+
+delayDiff = normalizeTimeDiff $ TimeDiff{tdPicosec = microSecDelay*1000000*4}
 
 openSock :: IO NodeHandle
 openSock = do 
-    args <- fmap (map $ L.groupBy (\_ c -> c /= ':')) getArgs
-    when (length args < 2) exitFailure
+    addrs <- fmap (map $ groupBy (\_ c -> c /= ':')) getArgs
+    when (length addrs < 2) exitFailure
     let ![myId, myHost, myPort] = head addrs
-    addrinfos <- getAddrInfo Nothing (Just hostName) (Just port)
+    addrinfos <- getAddrInfo Nothing (Just myHost) (Just myPort)
     let serveraddr = head addrinfos
     sock <- socket (addrFamily serveraddr) Datagram defaultProtocol
-    setSocketOption sock RecvTimeOut (microSecDelay*1000)
+    setSocketOption sock RecvTimeOut (fromInteger $ microSecDelay `div` 1000)
 
     nodes <- forM (tail addrs) $ \[index, ':':host, ':':port'] -> do
                 hostId <- inet_addr host
                 return $! (read index, SockAddrInet (PortNum $ read port') hostId) 
-    return $! NodeHandle sock (read myId) (addrAddress serveraddr) nodes (foldl1 (max `on` fst) nodes)
+    return $! NodeHandle sock (read myId) nodes 0
 
 main :: IO ()
 main = do
     nh <- openSock
-    if nhId nh == 
-       foldl1 (max `on` fst) (nhNode nh)
-      then iAmKing nh
-      else processQueue nh 
+    elect nh
 
-iAmKing nh{nhSocket = sock, nhNodes = nodes, nhId = myId} = do
-    forM_ nodes $ \(i,addr) ->
-        when (i /= myId) $ do
-           sendTo sock "IAMTHEKING" addr
-    processQueue nh Nothing
+addrToId addr = 
+    fromJust . 
+    foldl (\k (i,a) -> 
+             if a == addr then Just i else k) Nothing .
+    nhNodes
 
-   threadDelay (microSecDelay*4)
+elect nh
+    | nhId nh == foldl' (\i (j,_) -> i `max` j) 0 (nhNodes nh)
+        = iAmKing nh
+    | otherwise = do
+        forM_ (nhNodes nh) $ \(i,addr) ->
+            when (i > nhId nh) $ do
+               void $ sendTo (nhSock nh) "ALIVE?" addr
+        (message, _) <- recvFrom (nhSock nh) 20
+        case message of
+             "FINETHANKS" -> waitKing nh
+             "" -> iAmKing nh
+             _  -> undefined
 
-processQueue nh{nhSock = sock} lastPongTime = do
-    beginTime <- getClockTime
-    nh' <-if beginTime > addToClockTime delayDiff lastPongTime
-            then elect nh
-            else return nh
-    when (nhId nh' /= nhKing nh') $ do
-        sendTo sock "PING" (fromJust $ lookup nodes kId)
-   (message, len, addr) <- recvFrom sock 20
-   case message of
-        "PONG"   -> getClockTime >> (processQueue nh . Just)
-        "ALIVE?" -> (sendTo sock "FINETHANKS") >> elect nh
-        "IAMTHEKING" -> processQueue nh{nhKing = 
-            MB.fromJust $ 
-            foldl (\p (i,a) -> 
-                if a == addr 0then Just i else Nothing) $ nhNodes nh}
-        "" ->  
+waitKing nh = do
+    (message, addr) <- recvFrom (nhSock nh) 20
+    case message of
+         "IAMTHEKING" -> 
+            getClockTime >>= 
+            (processQueue nh{nhKing = addrToId addr nh})
+         _ -> elect nh
 
+iAmKing nh = do
+    forM_ (nhNodes nh) $ \(i,addr) ->
+        when (i /= nhId nh) $ do
+           void $ sendTo (nhSock nh) "IAMTHEKING" addr
+    time <- getClockTime
+    processQueue (nh{nhKing = nhId nh}) time
+
+processQueue nh lastPongTime = getClockTime >>=
+    \beginTime ->
+      if beginTime > addToClockTime delayDiff lastPongTime
+         then elect nh
+         else do
+           let sock = nhSock nh
+               nodes = nhNodes nh
+               king = nhKing nh
+               myId = nhId nh
+           when (myId /= king) $ do
+               void $ sendTo (sock) "PING" (fromJust $ lookup king nodes)
+           (message, addr) <- recvFrom (nhSock nh) 20
+           case message of
+                "PONG"   -> getClockTime >>= (processQueue nh)
+                "ALIVE?" -> (sendTo sock "FINETHANKS" addr) >> elect nh
+                ""       -> processQueue nh lastPongTime
