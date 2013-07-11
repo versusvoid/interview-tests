@@ -8,6 +8,7 @@ import           System.Environment as Env(getArgs)
 import           System.Exit(exitFailure)
 import           System.Time
 import           Control.Monad
+import           Control.Concurrent(threadDelay)
 
 data NodeHandle = 
      NodeHandle {nhSock    :: Socket,
@@ -20,7 +21,6 @@ microSecDelay = 1000*1000
 
 delayDiff = normalizeTimeDiff $ TimeDiff{tdPicosec = microSecDelay*1000000*4}
 
-openSock :: IO NodeHandle
 openSock = do 
     addrs <- fmap (map $ groupBy (\_ c -> c /= ':')) getArgs
     when (length addrs < 2) exitFailure
@@ -35,7 +35,6 @@ openSock = do
                 return $! (read index, SockAddrInet (PortNum $ read port') hostId) 
     return $! NodeHandle sock (read myId) nodes 0
 
-main :: IO ()
 main = do
     nh <- openSock
     elect nh
@@ -87,6 +86,17 @@ processQueue nh lastPongTime = getClockTime >>=
                void $ sendTo (sock) "PING" (fromJust $ lookup king nodes)
            (message, addr) <- recvFrom (nhSock nh) 20
            case message of
-                "PONG"   -> getClockTime >>= (processQueue nh)
+                "PONG"   -> getClockTime
+                        >>= (waitDiff beginTime) 
+                        >>= (processQueue nh)
                 "ALIVE?" -> (sendTo sock "FINETHANKS" addr) >> elect nh
-                ""       -> processQueue nh lastPongTime
+                ""       -> getClockTime
+                        >>= (waitDiff beginTime)
+                        >>  processQueue nh lastPongTime
+
+waitDiff (TOD s1 ps1) c@(TOD s2 ps2)
+    | microDiff > microSecDelay = return c
+    | otherwise = threadDelay (fromInteger $ (microSecDelay - microDiff)) 
+               >> return c
+    where
+        microDiff = (s2 - s2)*1000000 + (ps2 - ps1) `div` 1000000
