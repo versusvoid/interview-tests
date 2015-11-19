@@ -1,0 +1,59 @@
+﻿<Window x:Name="GameField1" x:Class="MinimalTowerDefence.GameField"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:Converters="clr-namespace:MinimalTowerDefence"
+        Title="Game field" Height="600" Width="800" MouseMove="window_MouseMove" MouseDown="window_MouseDown">
+    <Window.Resources>
+        <Converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
+        <Style TargetType="ComboBoxItem" x:Key="GunShopItemStyle">
+            <Setter Property="IsEnabled" Value="{Binding IsSelectable}" />
+        </Style>
+        <DataTemplate x:Key="GunShopDataTemplate">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Level}" HorizontalAlignment="Left"  Grid.Column="0"/>
+                <TextBlock Text="{Binding Price}" Foreground="#FFB2B200" HorizontalAlignment="Right" Grid.Column="1"/>
+            </Grid>
+        </DataTemplate>
+    </Window.Resources>
+    <Grid x:Name="contentGrid" SizeChanged="gameFieldSizeChanged">
+        <Image x:Name="fieldImage" Stretch="Fill" Panel.ZIndex="0"/>
+
+        <Canvas x:Name="canvas" Panel.ZIndex="1" >
+            <Ellipse Fill="Red" Stroke="Black" StrokeThickness="1" Width="20" Height="20" Canvas.Left="100" Canvas.Top="100" Visibility="Collapsed"/>
+        </Canvas>
+
+
+        <Label Panel.ZIndex="2" x:Name="moneyLabel" Content="Label" HorizontalAlignment="Left" Margin="10,10,0,0" VerticalAlignment="Top" 
+               Foreground="#FFE4E40E"/>
+        <Label Panel.ZIndex="2" x:Name="lifuLabel" Content="Label" HorizontalAlignment="Left" Margin="53,10,0,0" VerticalAlignment="Top" 
+               Foreground="#FFC90E0E"/>
+
+        <ComboBox Panel.ZIndex="2" x:Name="mineSelector" HorizontalAlignment="Right" Margin="0,10,10,0" VerticalAlignment="Top" Width="60" 
+                  HorizontalContentAlignment="Stretch" ItemTemplate="{DynamicResource GunShopDataTemplate}" 
+                  SelectionChanged="gunSelector_SelectionChanged" ItemContainerStyle="{DynamicResource GunShopItemStyle}" />
+        <TextBlock Panel.ZIndex="3" 
+                   Visibility="{Binding SelectedItem, ElementName=mineSelector, Converter={StaticResource NullToVisibilityConverter}}"
+                   Margin="0,12,10,0" HorizontalAlignment="Right" VerticalAlignment="Top" Width="50"
+                   IsHitTestVisible="False" Text="Mine" />
+
+        <ComboBox Panel.ZIndex="2" x:Name="machineGunSelector" HorizontalAlignment="Right" Margin="0,40,10,0" VerticalAlignment="Top" Width="60" 
+                  HorizontalContentAlignment="Stretch" ItemTemplate="{DynamicResource GunShopDataTemplate}"
+                  SelectionChanged="gunSelector_SelectionChanged" ItemContainerStyle="{DynamicResource GunShopItemStyle}" />
+        <TextBlock Panel.ZIndex="3" 
+                   Visibility="{Binding SelectedItem, ElementName=machineGunSelector, Converter={StaticResource NullToVisibilityConverter}}"
+                   Margin="0,43,18,0" HorizontalAlignment="Right" VerticalAlignment="Top" Width="50"
+                   IsHitTestVisible="False" Text="Machine" />
+
+        <ComboBox Panel.ZIndex="2" x:Name="lazerSelector" HorizontalAlignment="Right" Margin="0,70,10,0" VerticalAlignment="Top" Width="60" 
+                  HorizontalContentAlignment="Stretch" ItemTemplate="{DynamicResource GunShopDataTemplate}" 
+                  SelectionChanged="gunSelector_SelectionChanged" ItemContainerStyle="{DynamicResource GunShopItemStyle}" />
+        <TextBlock Panel.ZIndex="3" 
+                   Visibility="{Binding SelectedItem, ElementName=lazerSelector, Converter={StaticResource NullToVisibilityConverter}}"
+                   Margin="0,73,10,0" HorizontalAlignment="Right" VerticalAlignment="Top" Width="50"
+                   IsHitTestVisible="False" Text="Lazer" />
+    </Grid>
+</Window>
