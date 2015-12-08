@@ -19,7 +19,7 @@
             </Grid>
         </DataTemplate>
     </Window.Resources>
-    <Grid x:Name="contentGrid" SizeChanged="gameFieldSizeChanged">
+    <Grid x:Name="contentGrid" SizeChanged="GameFieldSizeChanged">
         <Image x:Name="fieldImage" Stretch="Fill" Panel.ZIndex="0"/>
 
         <Canvas x:Name="canvas" Panel.ZIndex="1" >

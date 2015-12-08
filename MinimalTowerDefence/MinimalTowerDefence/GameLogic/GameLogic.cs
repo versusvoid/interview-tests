@@ -1,12 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
 
 namespace MinimalTowerDefence
@@ -14,7 +8,7 @@ namespace MinimalTowerDefence
     /// <summary>
     /// Handles the game logic processes. All computations are in polar coordinates.
     /// </summary>
-    partial class GameLogic
+    internal partial class GameLogic
     {
         /// <summary>
         /// Logical tower radius.
@@ -22,7 +16,15 @@ namespace MinimalTowerDefence
         public static readonly double TowerRadius = 7;
 
         /// <summary>
-        /// Representes messeges sended by other threads to game logic thread.
+        /// Maximal logic(!) radius that will be visible on screen.
+        /// </summary>
+        public static readonly double MaxVisibleLogicRadius = 100.0;
+
+
+        public BlockingCollection<Message> MessageBox { get; private set; }
+
+        /// <summary>
+        /// Represents messages sent by other threads to game logic thread.
         /// </summary>
         public struct Message
         {
@@ -32,24 +34,24 @@ namespace MinimalTowerDefence
                 NewGun,
             }
 
-            public Type type { get; private set; }
+            public Type MessageType { get; private set; }
 
             public Gun.Type GunType { get; private set; }
+
             public int GunLevel { get; private set; }
+
             public PolarCoordinates GunPosition { get; private set; }
 
             public static Message ContinueSimulation()
             {
-                return new Message() { type = Type.ContinueSimulation };
+                return new Message() { MessageType = Type.ContinueSimulation };
             }
 
             public static Message NewGun(Gun.Type newGunType, int newGunLevel, PolarCoordinates newGunPosition)
             {
-                return new Message() { type = Type.NewGun, GunType = newGunType, GunLevel = newGunLevel, GunPosition = newGunPosition };
+                return new Message() { MessageType = Type.NewGun, GunType = newGunType, GunLevel = newGunLevel, GunPosition = newGunPosition };
             }
         }
-
-        public BlockingCollection<Message> MessageBox { get; private set; }
 
         /// <summary>
         /// Holds any game object and number of processing steps it should skip.
@@ -57,139 +59,149 @@ namespace MinimalTowerDefence
         /// <typeparam name="T">Monster, Gun or Projectile</typeparam>
         private class GameObject<T>
         {
-            /// <summary>
-            /// Monster, Gun or Projectile.
-            /// </summary>
-            public T gameObject { get; set; }
-            /// <summary>
-            /// Number of processing steps object should skip.
-            /// </summary>
-            public int skipStepsCount { get; set; }
-
-            public GameObject(T gameObject) 
+            public GameObject(T gameObject)
             {
-                this.gameObject = gameObject;
+                this.InnerGameObject = gameObject;
             }
+
+            /// <summary>
+            /// Gets underlying Monster, Gun or Projectile.
+            /// </summary>
+            public T InnerGameObject { get; private set; }
+
+            /// <summary>
+            /// Gets or sets number of processing steps object should skip.
+            /// </summary>
+            public int SkipStepsCount { get; set; }
         }
-        private static GameObject<T> makeGameObject<T>(T gameObject)
+
+        private static GameObject<T> MakeGameObject<T>(T gameObject)
         {
             return new GameObject<T>(gameObject);
         }
 
-        private Dictionary<long, GameObject<Monster>> monsters = new Dictionary<long, GameObject<Monster>>();
-        private Dictionary<long, GameObject<Gun>> guns = new Dictionary<long, GameObject<Gun>>();
-        private Dictionary<long, GameObject<Projectile>> projectiles = new Dictionary<long, GameObject<Projectile>>();
+        private Dictionary<long, GameObject<Monster>> _monsters = new Dictionary<long, GameObject<Monster>>();
+        private Dictionary<long, GameObject<Gun>> _guns = new Dictionary<long, GameObject<Gun>>();
+        private Dictionary<long, GameObject<Projectile>> _projectiles = new Dictionary<long, GameObject<Projectile>>();
 
-        private Random rand = new Random();
+        private Random _rand = new Random();
+
         /// <summary>
         /// Life of tower.
         /// </summary>
-        private double towerLifu = 1000;
+        private double _towerLifu = 1000;
+
         /// <summary>
         /// Player account value.
         /// </summary>
-        private long playerMoney = 1000;
+        private long _playerMoney = 1000;
+
         /// <summary>
         /// Number of currently alive monsters.
         /// </summary>
-        private int monstersAlive = 0;
+        private int _monstersAlive = 0;
 
         #region ID counters for game objects
-        private long nextProjectileID = 0;
-        private long nextMonsterID = 0;
-        private long nextGunID = 0;
-        #endregion
 
-        private GameField gameFieldWindow;
-        private Renderer renderer;
+        private long _nextProjectileID = 0;
+        private long _nextMonsterID = 0;
+        private long _nextGunID = 0;
+
+        #endregion ID counters for game objects
+
+        private GameField _gameFieldWindow;
+        private Renderer _renderer;
 
         public GameLogic(GameField gameFieldWindow, Renderer renderer)
         {
             this.MessageBox = new BlockingCollection<Message>();
-            this.gameFieldWindow = gameFieldWindow;
-            this.renderer = renderer;
+            this._gameFieldWindow = gameFieldWindow;
+            this._renderer = renderer;
         }
 
         /// <summary>
         /// Game logic thread entry point.
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        internal void run(object sender, System.ComponentModel.DoWorkEventArgs e)
+        internal void Run(object sender, System.ComponentModel.DoWorkEventArgs e)
         {
-            towerLifuChanged();
+            TowerLifuChanged();
             for (int i = 1; i <= 5; ++i)
             {
                 var previousWaveEnd = DateTime.Now;
                 bool waveStarted = false;
-                while (!waveStarted || monstersAlive > 0)
+                while (!waveStarted || _monstersAlive > 0)
                 {
                     var newEvent = MessageBox.Take();
-                    switch (newEvent.type)
+                    switch (newEvent.MessageType)
                     {
                         case Message.Type.ContinueSimulation:
-                            playerMoney += 10;
+                            _playerMoney += 10;
                             if (!waveStarted && (DateTime.Now - previousWaveEnd).TotalMilliseconds > 10000)
                             {
-                                addWaveMonsters(i);
+                                AddWaveMonsters(i);
                                 waveStarted = true;
                             }
-                            runWave(i);
-                            playerMoneyChanged();
+
+                            RunWave(i);
+                            PlayerMoneyChanged();
                             break;
+
                         case Message.Type.NewGun:
-                            var price = Gun.price(newEvent.GunType, newEvent.GunLevel);
-                            if (price <= playerMoney)
+                            var price = Gun.Price(newEvent.GunType, newEvent.GunLevel);
+                            if (price <= _playerMoney)
                             {
-                                playerMoney -= price;
-                                addGun(newEvent);
-                                playerMoneyChanged();
+                                _playerMoney -= price;
+                                AddGun(newEvent);
+                                PlayerMoneyChanged();
                             }
+
                             break;
+
                         default:
                             throw new InvalidOperationException();
                     }
 
-                    if (towerLifu == 0)
+                    if (this._towerLifu == 0)
                     {
-                        Application.Current.Dispatcher.BeginInvoke(new Action<bool>(gameFieldWindow.gameOver), false);
+                        Application.Current.Dispatcher.BeginInvoke(new Action<bool>(_gameFieldWindow.GameOver), false);
                         return;
                     }
                 }
             }
 
-            Application.Current.Dispatcher.BeginInvoke(new Action<bool>(gameFieldWindow.gameOver), true);
+            Application.Current.Dispatcher.BeginInvoke(new Action<bool>(_gameFieldWindow.GameOver), true);
         }
 
-        private void addGun(Message newEvent)
+        private void AddGun(Message newEvent)
         {
-            var gun = new Gun(nextGunID++, newEvent.GunType, newEvent.GunLevel, newEvent.GunPosition, 80 + 20 * newEvent.GunLevel);
-            newGun(gun);
-            guns.Add(gun.ID, makeGameObject(gun));
+            var gun = new Gun(_nextGunID++, newEvent.GunType, newEvent.GunLevel, newEvent.GunPosition, 80 + 20 * newEvent.GunLevel);
+            NewGun(gun);
+            _guns.Add(gun.ID, GameLogic.MakeGameObject(gun));
         }
-        
-        private void addWaveMonsters(int wave)
+
+        private void AddWaveMonsters(int wave)
         {
             for (int i = 0; i < 100 * wave; ++i)
             {
                 // New monster types appear with new waves (3 - number of monster types, 5 - number of waves).
-                var type = rand.Next(0, (int)Math.Round((double)wave * 3.0 / 5.0));
-                var monster = new Monster(nextMonsterID++, (Monster.Type)type,
-                    new PolarCoordinates(100 + rand.NextDouble() * 20 * wave, rand.NextDouble() * 2 * Math.PI),
+                var type = _rand.Next(0, (int)Math.Round((double)wave * 3.0 / 5.0));
+                var monster = new Monster(_nextMonsterID++, (Monster.Type)type,
+                    new PolarCoordinates(100 + _rand.NextDouble() * 20 * wave, _rand.NextDouble() * 2 * Math.PI),
                     100 + 20 * type);
-                newMonster(monster);
-                monsters.Add(monster.ID, makeGameObject(monster));
+                NewMonster(monster);
+                _monsters.Add(monster.ID, GameLogic.MakeGameObject(monster));
             }
-            monstersAlive = monsters.Count;
+
+            _monstersAlive = _monsters.Count;
         }
 
-        private void runWave(int wave)
+        private void RunWave(int wave)
         {
             var start = DateTime.Now;
 
-            updateGuns();
-            updateProjectiles();
-            updateMonster();
+            UpdateGuns();
+            UpdateProjectiles();
+            UpdateMonster();
 
             var time = (DateTime.Now - start).TotalMilliseconds;
             if (time >= (1000 / 24) / 2)
@@ -198,19 +210,19 @@ namespace MinimalTowerDefence
             }
         }
 
-        private void updateGuns()
+        private void UpdateGuns()
         {
-            updateObjects(guns, () => true, fireGun);
+            UpdateObjects(_guns, () => true, new ObjectUpdater<Gun>(ObjectUpdaterFireGun));
         }
 
-        private void updateProjectiles()
+        private void UpdateProjectiles()
         {
-            updateObjects(projectiles, () => true, moveProjectile);
+            UpdateObjects(_projectiles, () => true, new ObjectUpdater<Projectile>(ObjectUpdaterMoveProjectile));
         }
 
-        private void updateMonster()
+        private void UpdateMonster()
         {
-            updateObjects(monsters, () => towerLifu > 0, moveMonster);
+            UpdateObjects(_monsters, () => _towerLifu > 0, new ObjectUpdater<Monster>(ObjectUpdaterMoveMonster));
         }
 
         private delegate bool ObjectUpdater<T>(T gameObject, ref int skipStepsCount);
@@ -222,23 +234,25 @@ namespace MinimalTowerDefence
         /// <param name="objects"></param>
         /// <param name="predicate">condition whether to continue update</param>
         /// <param name="updateObject">method that handles update of single object</param>
-        private void updateObjects<T>(Dictionary<long, GameObject<T>> objects, Func<bool> predicate, ObjectUpdater<T> updateObject)
+        private void UpdateObjects<T>(Dictionary<long, GameObject<T>> objects, Func<bool> predicate, ObjectUpdater<T> updateObject)
         {
             var deadObjects = new List<long>();
             foreach (var fieldObject in objects)
             {
-                if (fieldObject.Value.skipStepsCount > 0)
+                if (fieldObject.Value.SkipStepsCount > 0)
                 {
-                    fieldObject.Value.skipStepsCount -= 1;
+                    fieldObject.Value.SkipStepsCount -= 1;
                     continue;
                 }
 
                 int newSkipStepsCount = 0;
 
-                if (!updateObject(fieldObject.Value.gameObject, ref newSkipStepsCount))
+                if (!updateObject(fieldObject.Value.InnerGameObject, ref newSkipStepsCount))
+                {
                     deadObjects.Add(fieldObject.Key);
+                }
 
-                fieldObject.Value.skipStepsCount = newSkipStepsCount;
+                fieldObject.Value.SkipStepsCount = newSkipStepsCount;
 
                 if (!predicate()) break;
             }
@@ -248,7 +262,7 @@ namespace MinimalTowerDefence
                 objects.Remove(id);
             }
         }
-        
+
         /// <summary>
         /// Moves projectile along radius, checks for collisions with monsters.
         /// </summary>
@@ -256,7 +270,7 @@ namespace MinimalTowerDefence
         /// true if projectile still active,
         /// false if it have hit something or got out of view
         /// </returns>
-        private bool moveProjectile(Projectile projectile, ref int newSkipStepsCount)
+        private bool ObjectUpdaterMoveProjectile(Projectile projectile, ref int newSkipStepsCount)
         {
             newSkipStepsCount = 0;
 
@@ -266,43 +280,50 @@ namespace MinimalTowerDefence
 
             var radius = Projectile.BaseRadius + Projectile.LevelRadiusStep * projectile.Level;
 
-            foreach (var monsterAndDelay in monsters.Values)
+            foreach (var monsterAndDelay in _monsters.Values)
             {
-                var monster = monsterAndDelay.gameObject;
+                var monster = monsterAndDelay.InnerGameObject;
                 if (monster.Life == 0) continue;
                 if (monster.Position.R < projectile.Position.R) continue;
-                if (monster.Position.R - Monster.Radius[(int)monster.type] > r1 + radius) continue;
+                if (monster.Position.R - Monster.Radius[(int)monster.MonsterType] > r1 + radius) continue;
 
                 var cos = Math.Cos(monster.Position.φ - projectile.Position.φ);
 
                 var t = (monster.Position.R * cos - r0) / (r1 - r0);
-                t = Math.Max(0, Math.Min(1, t)); // interpolation parameter between previous projectile position
-                                                 // and new one, where distance to monster is minimal
 
-                var r1t = (r0*(1 - t) + r1*t);
-                var r1t_2 = r1t*r1t;
+                // Interpolation parameter between previous projectile position
+                // and new one, where distance to monster is minimal.
+                t = Math.Max(0, Math.Min(1, t));
+
+                var r1t = (r0 * (1 - t) + r1 * t);
+                var r1t_2 = r1t * r1t;
 
                 var r2 = monster.Position.R;
-                var r2_2 = r2*r2;
-                var d = Math.Sqrt(r1t_2 + r2_2 - 2 * r1t * r2 * cos); // computing distance by hand because already have computed Cos
-                if (d < radius + Monster.Radius[(int)monster.type]) // if actual distance suppose hit
+                var r2_2 = r2 * r2;
+
+                // Computing distance by hand because already have computed Cos.
+                var d = Math.Sqrt(r1t_2 + r2_2 - 2 * r1t * r2 * cos);
+
+                // If actual distance suppose hit.
+                if (d < radius + Monster.Radius[(int)monster.MonsterType])
                 {
                     monster.Life = Math.Max(0, monster.Life - Projectile.BasePower - 10 * projectile.Level);
                     if (monster.Life == 0)
                     {
-                        monsterDied(monster.ID, monster.type, true);
+                        MonsterDied(monster.ID, monster.MonsterType, true);
                     }
 
-                    projectileHit(projectile.ID);
+                    ProjectileHit(projectile.ID);
                     return false;
                 }
             }
 
-            // Moving projectile along radius
-            projectile.Position.R = r1;
-            projectileMoved(projectile.ID, projectile.Position);
+            // Moving projectile along radius.
+            projectile.Position = new PolarCoordinates(r1, projectile.Position.φ);
+            ProjectileMoved(projectile.ID, projectile.Position);
 
-            if (r1 < Renderer.MaxVisibleLogicRadius * 1.2) // if projectile is still visible on (or not far from) screen
+            // If projectile is still visible on (or not far from) screen.
+            if (r1 < MaxVisibleLogicRadius * 1.2)
             {
                 return true;
             }
@@ -314,20 +335,23 @@ namespace MinimalTowerDefence
         /// Fires gun depending on it's type.
         /// </summary>
         /// <returns>true if gun still alive</returns>
-        private bool fireGun(Gun gun, ref int newSkipStepsCount)
+        private bool ObjectUpdaterFireGun(Gun gun, ref int newSkipStepsCount)
         {
             if (gun.Life == 0) return false;
 
-            switch (gun.type)
+            switch (gun.GunType)
             {
                 case Gun.Type.Machine:
-                    newSkipStepsCount = fireMachineGun(gun);
+                    newSkipStepsCount = FireMachineGun(gun);
                     break;
+
                 case Gun.Type.Lazer:
-                    newSkipStepsCount = fireLaserGun(gun);
+                    newSkipStepsCount = FireLaserGun(gun);
                     break;
+
                 case Gun.Type.Mine:
                     break;
+
                 default:
                     throw new InvalidOperationException();
             }
@@ -339,13 +363,13 @@ namespace MinimalTowerDefence
         /// Fires laser gun. Searches for laser ray intersections with monsters.
         /// </summary>
         /// <returns>Number of iterations till next volley</returns>
-        private int fireLaserGun(Gun gun)
+        private int FireLaserGun(Gun gun)
         {
-            laserFired(gun.ID);
+            LaserFired(gun.ID);
             var lazerRayWidth = Gun.BaseLaserRayWidth + gun.Level * Gun.LaserRayWidthStep;
-            foreach (var monsterObject in monsters.Values)
+            foreach (var monsterObject in _monsters.Values)
             {
-                var monster = monsterObject.gameObject;
+                var monster = monsterObject.InnerGameObject;
                 if (monster.Life == 0) continue;
                 if (monster.Position.R <= gun.Position.R) continue;
 
@@ -353,7 +377,8 @@ namespace MinimalTowerDefence
                 var maxφ = Math.Max(monster.Position.φ, gun.Position.φ);
                 var dφ = Math.Min(maxφ - minφ, minφ + 2 * Math.PI - maxφ);
 
-                if (dφ > Math.PI / 4) continue; // sanity check)
+                // Sanity check.
+                if (dφ > Math.PI / 4) continue;
 
                 var distanceToRay = monster.Position.R * Math.Sin(dφ);
                 if (distanceToRay <= lazerRayWidth)
@@ -361,49 +386,50 @@ namespace MinimalTowerDefence
                     monster.Life = Math.Max(0, monster.Life - Gun.BaseLaserPower - 5 * gun.Level);
                     if (monster.Life == 0)
                     {
-                        monsterDied(monster.ID, monster.type, true);
+                        MonsterDied(monster.ID, monster.MonsterType, true);
                     }
                 }
             }
 
-            return (Gun.NumLevels - gun.Level)*7;
+            return (Gun.NumLevels - gun.Level) * 7;
         }
 
         /// <summary>
         /// Fires machine gun - creates new projectile.
         /// </summary>
         /// <returns>Number of iterations till next volley</returns>
-        private int fireMachineGun(Gun gun)
+        private int FireMachineGun(Gun gun)
         {
-            var projectile = new Projectile(nextProjectileID++, gun.Level, new PolarCoordinates(gun.Position.R + 0.1, gun.Position.φ));
-            newProjectile(projectile);
-            projectiles.Add(projectile.ID, makeGameObject(projectile));
+            var projectile = new Projectile(_nextProjectileID++, gun.Level, new PolarCoordinates(gun.Position.R + 0.1, gun.Position.φ));
+            NewProjectile(projectile);
+            _projectiles.Add(projectile.ID, GameLogic.MakeGameObject(projectile));
 
-            return (Gun.NumLevels - gun.Level)*5;
+            return (Gun.NumLevels - gun.Level) * 5;
         }
 
         /// <summary>
         /// Blows mine. Searches for affected monsters.
         /// </summary>
-        private void blowMine(Gun mine)
+        private void BlowMine(Gun mine)
         {
-            mineBlown(mine.ID);
+            MineBlown(mine.ID);
             var explosionRadius = Gun.ExplosionBaseRadius + Gun.ExplosionRadiusStep * mine.Level;
-            foreach (var monsterObject in monsters.Values)
+            foreach (var monsterObject in _monsters.Values)
             {
-                var monster = monsterObject.gameObject;
+                var monster = monsterObject.InnerGameObject;
                 if (monster.Life == 0) continue;
-                if (Math.Abs(monster.Position.R - mine.Position.R) > explosionRadius + Monster.Radius[(int)monster.type]) continue;
+                if (Math.Abs(monster.Position.R - mine.Position.R) > explosionRadius + Monster.Radius[(int)monster.MonsterType]) continue;
 
                 var distance = PolarCoordinates.PolarDistance(monster.Position, mine.Position);
-                distance = Math.Min(explosionRadius, Math.Max(0, distance - Gun.Radius - Monster.Radius[(int)monster.type]));
+                distance = Math.Min(explosionRadius, Math.Max(0, distance - Gun.Radius - Monster.Radius[(int)monster.MonsterType]));
 
                 monster.Life = Math.Max(0, monster.Life - (1.0 - distance / explosionRadius) * (mine.Level + 1) * Gun.ExplosionPower);
                 if (monster.Life == 0)
                 {
-                    monsterDied(monster.ID, monster.type, true);
+                    MonsterDied(monster.ID, monster.MonsterType, true);
                 }
             }
+
             mine.Life = 0;
         }
 
@@ -411,37 +437,41 @@ namespace MinimalTowerDefence
         /// Moves monster around. Searches for interactions.
         /// </summary>
         /// <returns>true if monster still alive</returns>
-        private bool moveMonster(Monster monster, ref int newSkipStepsCount)
+        private bool ObjectUpdaterMoveMonster(Monster monster, ref int newSkipStepsCount)
         {
             if (monster.Life == 0) return false;
 
-            if (monster.Position.R - TowerRadius < 0.5) // if monster reaches tower, it dies taking part of tower life
+            // If monster reaches tower, it dies taking part of tower life.
+            if (monster.Position.R - TowerRadius < 0.5)
             {
-                towerLifu = Math.Max(0, towerLifu - monster.Life / 10);
-                towerLifuChanged();
+                _towerLifu = Math.Max(0, _towerLifu - monster.Life / 10);
+                TowerLifuChanged();
                 monster.Life = 0;
-                monsterDied(monster.ID, monster.type, false);
+                MonsterDied(monster.ID, monster.MonsterType, false);
                 return false;
             }
 
             var vomitedGuns = new List<Gun>();
-            Lazy<double> deltaPhi = new Lazy<double>(() => // max difference between angles when gun can still be affected by vomiting monster
+
+            // Max difference between angles when gun can still be affected by vomiting monster.
+            Lazy<double> deltaPhi = new Lazy<double>(() =>
             {
                 return Math.Atan(Monster.VomitingRadiusOverSqrt2 / (monster.Position.R - Monster.VomitingRadiusOverSqrt2));
             });
-            foreach (var gunObject in guns.Values)
+
+            foreach (var gunObject in _guns.Values)
             {
-                var gun = gunObject.gameObject;
+                var gun = gunObject.InnerGameObject;
                 if (gun.Life == 0) continue;
-                
+
                 if (PolarCoordinates.PolarDistanceLessThan(monster.Position, gun.Position, Gun.Radius * 1.1))
                 {
-                    if (gun.type == Gun.Type.Mine)
+                    if (gun.GunType == Gun.Type.Mine)
                     {
-                        blowMine(gun);
+                        BlowMine(gun);
                         if (monster.Life > 0)
                         {
-                            // if monster survived the blast, it stops for some time
+                            // If monster survived the blast, it stops for some time.
                             newSkipStepsCount = (gun.Level + 1) * 7;
                             return true;
                         }
@@ -450,12 +480,12 @@ namespace MinimalTowerDefence
                             return false;
                         }
                     }
-                    else if (monster.type != Monster.Type.Vomiting)
+                    else if (monster.MonsterType != Monster.Type.Vomiting)
                     {
-                        gun.Life = Math.Max(0, gun.Life - Monster.Power[(int)monster.type]);
+                        gun.Life = Math.Max(0, gun.Life - Monster.Power[(int)monster.MonsterType]);
                         if (gun.Life == 0)
                         {
-                            gunDied(gun.ID);
+                            GunDied(gun.ID);
                         }
                     }
                 }
@@ -463,12 +493,13 @@ namespace MinimalTowerDefence
                 var minφ = Math.Min(monster.Position.φ, gun.Position.φ);
                 var maxφ = Math.Max(monster.Position.φ, gun.Position.φ);
                 var dφ = Math.Min(maxφ - minφ, minφ + 2 * Math.PI - maxφ);
-                if (monster.type == Monster.Type.Vomiting
+                if (monster.MonsterType == Monster.Type.Vomiting
                     && dφ <= deltaPhi.Value
                     && PolarCoordinates.PolarDistanceLessThan(monster.Position, gun.Position, Monster.VomitingRadius))
                 {
-                    if (gun.Position.R <= monster.Position.R / Math.Cos(dφ) / (1 + Math.Atan(dφ))) // if gun fall into vomiting area 
-                                                                                                   // (π/4 to left and right of direction from monster to tower)
+                    // If gun fall into vomiting area
+                    // (π/4 to left and right of direction from monster to tower).
+                    if (gun.Position.R <= monster.Position.R / Math.Cos(dφ) / (1 + Math.Atan(dφ)))
                     {
                         vomitedGuns.Add(gun);
                     }
@@ -477,39 +508,37 @@ namespace MinimalTowerDefence
 
             if (vomitedGuns.Count > 0)
             {
-                vomit(monster.ID);
+                Vomit(monster.ID);
                 foreach (var gun in vomitedGuns)
                 {
                     gun.Life = Math.Max(0, gun.Life - 10);
                     if (gun.Life == 0)
                     {
-                        gunDied(gun.ID);
+                        GunDied(gun.ID);
                     }
                 }
-                newSkipStepsCount = 6; // When monster vomits, it waits some time
+
+                // When monster vomits, it waits some time.
+                newSkipStepsCount = 6;
+
                 return true;
             }
             else
             {
-                var dr = Monster.Speed[(int)monster.type] * (1 - rand.NextDouble() * 0.01);
+                var dr = Monster.Speed[(int)monster.MonsterType] * (1 - _rand.NextDouble() * 0.01);
                 var r0 = monster.Position.R;
-                var r0_2 = r0*r0;
+                var r0_2 = r0 * r0;
                 var r1 = monster.Position.R - dr;
-                var r1_2 = r1*r1;
-                var R_2 = Monster.Speed[(int)monster.type]*Monster.Speed[(int)monster.type];
-                var dφ = (1 - 2 * (rand.Next() % 2)) * Math.Sqrt(1 - (r0_2 + r1_2 - R_2) / (2 * r0 * r1));
+                var r1_2 = r1 * r1;
+                var R_2 = Monster.Speed[(int)monster.MonsterType] * Monster.Speed[(int)monster.MonsterType];
+                var dφ = (1 - 2 * (_rand.Next() % 2)) * Math.Sqrt(1 - (r0_2 + r1_2 - R_2) / (2 * r0 * r1));
 
-                monster.Position.R = r1;
-                monster.Position.φ += dφ;
-                if (monster.Position.φ > Math.PI * 2) monster.Position.φ -= Math.PI * 2;
-                monsterMoved(monster.ID, monster.Position);
+                monster.Position = new PolarCoordinates(r1, monster.Position.φ + dφ);
+                MonsterMoved(monster.ID, monster.Position);
             }
 
             newSkipStepsCount = 0;
             return true;
         }
-
     }
-
-
 }

@@ -1,16 +1,13 @@
-﻿using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
+﻿// Copyright (c) Microsoft. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+
+using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -27,13 +24,16 @@ namespace MinimalTowerDefence
         /// <summary>
         /// An item for ComboBox representing gun that can be purchased.
         /// </summary>
-        class GunShopItem : INotifyPropertyChanged
+        private class GunShopItem : INotifyPropertyChanged
         {
             public Gun.Type Type { get; set; }
+
             public int Level { get; set; }
+
             public int Price { get; set; }
 
-            private bool isSelectable;
+            private bool _isSelectable;
+
             /// <summary>
             /// Whether gun can be purchased now.
             /// </summary>
@@ -41,11 +41,12 @@ namespace MinimalTowerDefence
             {
                 get
                 {
-                    return isSelectable;
+                    return _isSelectable;
                 }
+
                 set
                 {
-                    isSelectable = value;
+                    _isSelectable = value;
                     OnPropertyChanged("IsSelectable");
                 }
             }
@@ -61,69 +62,131 @@ namespace MinimalTowerDefence
             }
         }
 
-        private readonly BackgroundWorker renderWorker = new BackgroundWorker();
-        private Renderer renderer;
+        private readonly BackgroundWorker _renderWorker = new BackgroundWorker();
+        private Renderer _renderer;
 
-        private readonly BackgroundWorker logicWorker = new BackgroundWorker();
-        private GameLogic logic;
+        private readonly BackgroundWorker _logicWorker = new BackgroundWorker();
+        private GameLogic _logic;
 
         /// <summary>
         /// Timer indicating, that new game frame should be rendered.
         /// </summary>
-        private readonly DispatcherTimer renderFrameTimer = new DispatcherTimer();
+        private readonly DispatcherTimer _renderFrameTimer = new DispatcherTimer();
 
         /// <summary>
         /// Whether player had won.
         /// </summary>
-        private bool win;
+        private bool _win;
+
         /// <summary>
         /// Whether player currently selecting place for new gun.
         /// </summary>
-        private bool selectingGunPlace;
+        private bool _selectingGunPlace;
+
         /// <summary>
         /// Gun, that player is placing now.
         /// </summary>
-        private GunShopItem selectedGun;
+        private GunShopItem _selectedGun;
+
         /// <summary>
         /// Gun selectors for every gun type.
         /// </summary>
-        private ComboBox[] gunShop;
+        private ComboBox[] _gunShop;
+
         /// <summary>
         /// Size scale of pixel window size to game field size of game logic.
         /// </summary>
-        private double radialScale;
+        private double _radialScale;
+
         /// <summary>
         /// Bitmap for rendering frame.
         /// </summary>
-        private WriteableBitmap writeableBitmap;
+        private WriteableBitmap _writeableBitmap;
 
         public GameField()
         {
             InitializeComponent();
-            gunShop = new ComboBox[3];
-            gunShop[0] = mineSelector;
-            gunShop[1] = machineGunSelector;
-            gunShop[2] = lazerSelector;
+            _gunShop = new ComboBox[3];
+            _gunShop[0] = mineSelector;
+            _gunShop[1] = machineGunSelector;
+            _gunShop[2] = lazerSelector;
 
-            renderFrameTimer.Tick += requestNewFrame;
-            renderFrameTimer.Interval = new TimeSpan(0, 0, 0, 0, 1000 / 24);
+            _renderFrameTimer.Tick += RequestNewFrame;
+            _renderFrameTimer.Interval = new TimeSpan(0, 0, 0, 0, 1000 / 24);
 
-            initGunShop();
-            init();
+            InitGunShop();
+            Init();
         }
 
-
-
-        private void initGunShop()
+        /// <summary>
+        /// Called (remotely) by game logic thread when new gun had been successfully added.
+        /// </summary>
+        internal void GunAdded()
         {
-            mineSelector.ItemsSource = initSelector(Gun.Type.Mine);
-            lazerSelector.ItemsSource = initSelector(Gun.Type.Lazer);
-            machineGunSelector.ItemsSource = initSelector(Gun.Type.Machine);
+            Debug.Assert(_selectingGunPlace);
+            _selectingGunPlace = false;
+
+            mineSelector.SelectedIndex = -1;
+            lazerSelector.SelectedIndex = -1;
+            machineGunSelector.SelectedIndex = -1;
+
+            canvas.Children[0].Visibility = System.Windows.Visibility.Collapsed;
         }
 
-        private System.Collections.IEnumerable initSelector(Gun.Type type)
+        /// <summary>
+        /// Called (remotely) by game logic when game ends.
+        /// </summary>
+        /// <param name="win">Whether player has won or lost.</param>
+        internal void GameOver(bool win)
         {
- 
+            _win = win;
+            Console.WriteLine("Finish: {0}", win);
+            _renderFrameTimer.Stop();
+            _renderer.MessageBox.Add(Renderer.Message.Stop());
+        }
+
+        /// <summary>
+        /// Called (remotely) by game logic, when player spends or earns money.
+        /// </summary>
+        /// <param name="playerMoney">New value of player account</param>
+        internal void SetPlayerMoney(long playerMoney)
+        {
+            moneyLabel.Content = playerMoney.ToString();
+
+            UpdateGunShopSelector(mineSelector, playerMoney);
+            UpdateGunShopSelector(machineGunSelector, playerMoney);
+            UpdateGunShopSelector(lazerSelector, playerMoney);
+        }
+
+        /// <summary>
+        /// Called (remotely) by game logic, when life value of tower changes.
+        /// </summary>
+        /// <param name="playerMoney">New value of tower's life.</param>
+        internal void SetTowerLifu(long towerLifu)
+        {
+            lifuLabel.Content = towerLifu.ToString();
+        }
+
+        /// <summary>
+        /// Called (remotely) by rendering thread, when it finishes new frame.
+        /// </summary>
+        internal void FrameRendered()
+        {
+            _logic.MessageBox.Add(GameLogic.Message.ContinueSimulation());
+
+            _writeableBitmap.AddDirtyRect(new Int32Rect(0, 0, (int)_writeableBitmap.Width, (int)_writeableBitmap.Height));
+            _writeableBitmap.Unlock();
+        }
+
+        private void InitGunShop()
+        {
+            mineSelector.ItemsSource = InitSelector(Gun.Type.Mine);
+            lazerSelector.ItemsSource = InitSelector(Gun.Type.Lazer);
+            machineGunSelector.ItemsSource = InitSelector(Gun.Type.Machine);
+        }
+
+        private System.Collections.IEnumerable InitSelector(Gun.Type type)
+        {
             var guns = new ObservableCollection<GunShopItem>();
             foreach (var level in Enumerable.Range(0, Gun.NumLevels))
             {
@@ -131,67 +194,57 @@ namespace MinimalTowerDefence
                 {
                     Type = type,
                     Level = level,
-                    Price = Gun.price(type, level),
+                    Price = Gun.Price(type, level),
                     IsSelectable = false
                 });
             }
+
             return guns;
         }
 
         /// <summary>
         /// Starts new game. Runs game logic and rendering threads.
         /// </summary>
-        private void init()
+        private void Init()
         {
-            renderer = new Renderer(this);
-            logic = new GameLogic(this, renderer);
+            _renderer = new Renderer(this);
+            _logic = new GameLogic(this, _renderer);
 
             if (contentGrid.ActualWidth > 0)
-                reinitFieldBitmap((int)contentGrid.ActualWidth, (int)contentGrid.ActualHeight);
+                ReinitFieldBitmap((int)contentGrid.ActualWidth, (int)contentGrid.ActualHeight);
 
-            logicWorker.DoWork += logic.run;
-            logicWorker.RunWorkerAsync();
+            _logicWorker.DoWork += _logic.Run;
+            _logicWorker.RunWorkerAsync();
 
-            renderWorker.DoWork += renderer.run;
-            renderWorker.RunWorkerCompleted += rendererStopped;
-            renderWorker.WorkerSupportsCancellation = true;
-            renderWorker.RunWorkerAsync();
+            _renderWorker.DoWork += _renderer.Run;
+            _renderWorker.RunWorkerCompleted += RendererStopped;
+            _renderWorker.WorkerSupportsCancellation = true;
+            _renderWorker.RunWorkerAsync();
 
-            renderFrameTimer.Start();
+            _renderFrameTimer.Start();
         }
 
         /// <summary>
         /// Sends request for new frame to rendering thread.
         /// </summary>
-        private void requestNewFrame(object sender, EventArgs e)
+        private void RequestNewFrame(object sender, EventArgs e)
         {
-            writeableBitmap.Lock();
-            renderer.messageBox.Add(Renderer.Message.Render(writeableBitmap.BackBuffer));
-        }
-
-        /// <summary>
-        /// Called (remotely) by rendering thread, when it finishes new frame.
-        /// </summary>
-        internal void frameRendered()
-        {
-            logic.MessageBox.Add(GameLogic.Message.ContinueSimulation());
-
-            writeableBitmap.AddDirtyRect(new Int32Rect(0, 0, (int)writeableBitmap.Width, (int)writeableBitmap.Height));          
-            writeableBitmap.Unlock();
+            _writeableBitmap.Lock();
+            _renderer.MessageBox.Add(Renderer.Message.Render(_writeableBitmap.BackBuffer));
         }
 
         /// <summary>
         /// Called when rendering thread has stopped. Meaning that game has ended.
         /// </summary>
-        private void rendererStopped(object sender, RunWorkerCompletedEventArgs e)
+        private void RendererStopped(object sender, RunWorkerCompletedEventArgs e)
         {
-            logicWorker.DoWork -= logic.run;
-            renderWorker.DoWork -= renderer.run;
-            renderer = null;
-            logic = null;
+            _logicWorker.DoWork -= _logic.Run;
+            _renderWorker.DoWork -= _renderer.Run;
+            _renderer = null;
+            _logic = null;
 
             var done = false;
-            if (win)
+            if (_win)
             {
                 MessageBox.Show("Hey, cheater, you won!", "Holy cow!");
                 done = true;
@@ -211,16 +264,16 @@ namespace MinimalTowerDefence
             }
             else
             {
-                init();
+                Init();
             }
         }
 
         /// <summary>
         /// Event handler for window resizing.
         /// </summary>
-        private void gameFieldSizeChanged(object sender, SizeChangedEventArgs e)
+        private void GameFieldSizeChanged(object sender, SizeChangedEventArgs e)
         {
-            reinitFieldBitmap((int)e.NewSize.Width, (int)e.NewSize.Height);
+            ReinitFieldBitmap((int)e.NewSize.Width, (int)e.NewSize.Height);
         }
 
         /// <summary>
@@ -228,42 +281,17 @@ namespace MinimalTowerDefence
         /// </summary>
         /// <param name="w">New width</param>
         /// <param name="h">New height</param>
-        private void reinitFieldBitmap(int w, int h) 
+        private void ReinitFieldBitmap(int w, int h)
         {
-            writeableBitmap = new WriteableBitmap(w, h, 96, 96, PixelFormats.Bgr32, null);
-            fieldImage.Source = writeableBitmap;
-            renderer.messageBox.Add(Renderer.Message.Resize(w, h));
-            radialScale = Math.Sqrt(w * w + h * h) / (Renderer.MaxVisibleLogicRadius * 2.0);
+            _writeableBitmap = new WriteableBitmap(w, h, 96, 96, PixelFormats.Bgr32, null);
+            fieldImage.Source = _writeableBitmap;
+            _renderer.MessageBox.Add(Renderer.Message.Resize(w, h));
+            _radialScale = Math.Sqrt(w * w + h * h) / (GameLogic.MaxVisibleLogicRadius * 2.0);
 
             var gunImage = canvas.Children[0] as Ellipse;
-        
-            gunImage.Width = 2 * Gun.Radius * radialScale;
-            gunImage.Height = 2 * Gun.Radius * radialScale;
-        }
 
-        /// <summary>
-        /// Called (remotely) by game logic when game ends.
-        /// </summary>
-        /// <param name="win">Whether player has won or lost.</param>
-        internal void gameOver(bool win)
-        {
-            this.win = win;
-            Console.WriteLine("Finish: {0}", win);
-            renderFrameTimer.Stop();
-            renderer.messageBox.Add(Renderer.Message.Stop());
-        }
-
-        /// <summary>
-        /// Called (remotely) by game logic, when player spends or earns money.
-        /// </summary>
-        /// <param name="playerMoney">New value of player account</param>
-        internal void setPlayerMoney(long playerMoney)
-        {
-            moneyLabel.Content = playerMoney.ToString();
-
-            updateGunShopSelector(mineSelector, playerMoney);
-            updateGunShopSelector(machineGunSelector, playerMoney);
-            updateGunShopSelector(lazerSelector, playerMoney);
+            gunImage.Width = 2 * Gun.Radius * _radialScale;
+            gunImage.Height = 2 * Gun.Radius * _radialScale;
         }
 
         /// <summary>
@@ -271,7 +299,7 @@ namespace MinimalTowerDefence
         /// </summary>
         /// <param name="selector">Gun selector</param>
         /// <param name="playerMoney">New value of player account</param>
-        private void updateGunShopSelector(ComboBox selector, long playerMoney) 
+        private void UpdateGunShopSelector(ComboBox selector, long playerMoney)
         {
             foreach (GunShopItem item in selector.ItemsSource)
             {
@@ -282,44 +310,38 @@ namespace MinimalTowerDefence
         }
 
         /// <summary>
-        /// Called (remotely) by game logic, when life value of tower changes.
-        /// </summary>
-        /// <param name="playerMoney">New value of tower's life.</param>
-        internal void setTowerLifu(long towerLifu)
-        {
-            lifuLabel.Content = towerLifu.ToString();
-        }
-
-        /// <summary>
         /// Handler for player selecting gun from shop.
         /// </summary>
         /// <param name="sender">ComboBox, one of three for every gun type.</param>
         private void gunSelector_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (e.AddedItems.Count == 0) return;
+
             // Disabling all other gun selectors.
-            foreach (var comboBox in gunShop)
+            foreach (var comboBox in _gunShop)
             {
                 if (comboBox != sender) comboBox.SelectedIndex = -1;
             }
+
             canvas.Children[0].Visibility = System.Windows.Visibility.Collapsed;
 
-            selectingGunPlace = true;
-            selectedGun = (GunShopItem)e.AddedItems[0];
+            _selectingGunPlace = true;
+            _selectedGun = (GunShopItem)e.AddedItems[0];
         }
 
         /// <summary>
-        /// Handler for mouse moving. 
+        /// Handler for mouse moving.
         /// Updates gun pre-image when user selects place for new gun.
         /// </summary>
         private void window_MouseMove(object sender, MouseEventArgs e)
         {
-            if (!selectingGunPlace) return;
+            if (!_selectingGunPlace) return;
 
             var gunImage = canvas.Children[0] as Ellipse;
-            if (!gunImage.IsVisible) {
+            if (!gunImage.IsVisible)
+            {
                 gunImage.Visibility = System.Windows.Visibility.Visible;
-                gunImage.Fill = new SolidColorBrush(Renderer.GunColors[(int)selectedGun.Type, selectedGun.Level]);
+                gunImage.Fill = new SolidColorBrush(Renderer.GunColors[(int)_selectedGun.Type, _selectedGun.Level]);
             }
 
             var pos = e.GetPosition(canvas);
@@ -328,38 +350,23 @@ namespace MinimalTowerDefence
         }
 
         /// <summary>
-        /// Handler for mouse click. 
+        /// Handler for mouse click.
         /// Sends request for new gun to game logic thread.
         /// </summary>
         private void window_MouseDown(object sender, MouseButtonEventArgs e)
         {
-            if (!selectingGunPlace) return;
+            if (!_selectingGunPlace) return;
 
             var screenPosition = e.GetPosition(contentGrid);
-            screenPosition.X -= Gun.Radius * radialScale;
-            screenPosition.Y -= Gun.Radius * radialScale;
+            screenPosition.X -= Gun.Radius * _radialScale;
+            screenPosition.Y -= Gun.Radius * _radialScale;
 
-            var p = (screenPosition - new Point(contentGrid.ActualWidth / 2, contentGrid.ActualHeight / 2)) / radialScale;
+            var p = (screenPosition - new Point(contentGrid.ActualWidth / 2, contentGrid.ActualHeight / 2)) / _radialScale;
             var polarCoordinates = new PolarCoordinates(Math.Sqrt(p.X * p.X + p.Y * p.Y), Math.Atan2(p.Y, p.X));
             if (polarCoordinates.φ < 0)
                 polarCoordinates.φ += 2 * Math.PI;
 
-            logic.MessageBox.Add(GameLogic.Message.NewGun(selectedGun.Type, selectedGun.Level, polarCoordinates));
-        }
-
-        /// <summary>
-        /// Called (remotely) by game logic thread when new gun had been successfully added.
-        /// </summary>
-        internal void gunAdded()
-        {
-            Debug.Assert(selectingGunPlace);
-            selectingGunPlace = false;
-
-            mineSelector.SelectedIndex = -1;
-            lazerSelector.SelectedIndex = -1;
-            machineGunSelector.SelectedIndex = -1;
-
-            canvas.Children[0].Visibility = System.Windows.Visibility.Collapsed;
+            _logic.MessageBox.Add(GameLogic.Message.NewGun(_selectedGun.Type, _selectedGun.Level, polarCoordinates));
         }
     }
 }

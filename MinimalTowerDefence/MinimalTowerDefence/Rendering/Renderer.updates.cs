@@ -1,70 +1,80 @@
-﻿using System;
+﻿// Copyright (c) Microsoft. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Windows;
 
 namespace MinimalTowerDefence
 {
-    partial class Renderer
+    internal partial class Renderer
     {
-
         /// <summary>
         /// Render thread entry point.
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        internal void run(object sender, System.ComponentModel.DoWorkEventArgs e)
+        internal void Run(object sender, System.ComponentModel.DoWorkEventArgs e)
         {
             while (true)
             {
-                var newEvent = messageBox.Take();
-                switch (newEvent.type)
+                var newEvent = MessageBox.Take();
+                switch (newEvent.MessageType)
                 {
                     // Global events
                     case Message.Type.Resize:
-                        resizeWritableBuffer(newEvent.NewWidth, newEvent.NewHeight);
+                        ResizeWritableBuffer(newEvent.NewWidth, newEvent.NewHeight);
                         break;
+
                     case Message.Type.Render:
-                        render(newEvent.pBackBuffer);
+                        Render(newEvent.pBackBuffer);
                         break;
 
                     // Effects-related events
                     case Message.Type.LaserFired:
-                        laserFired(newEvent.FieldObjectID);
+                        LaserFired(newEvent.FieldObjectID);
                         break;
+
                     case Message.Type.MineBlow:
-                        mineBlow(newEvent.FieldObjectID);
+                        MineBlow(newEvent.FieldObjectID);
                         break;
+
                     case Message.Type.MonsterVomit:
-                        monsterVomit(newEvent.FieldObjectID);
+                        MonsterVomit(newEvent.FieldObjectID);
                         break;
 
                     // Field objects-related events
                     case Message.Type.NewMonster:
-                        newMonster(newEvent.FieldObjectID, newEvent.FieldObjectType, newEvent.FieldObjectNewPosition);
+                        NewMonster(newEvent.FieldObjectID, newEvent.FieldObjectType, newEvent.FieldObjectNewPosition);
                         break;
+
                     case Message.Type.MonsterMoved:
-                        monsterMoved(newEvent.FieldObjectID, newEvent.FieldObjectNewPosition);
+                        MonsterMoved(newEvent.FieldObjectID, newEvent.FieldObjectNewPosition);
                         break;
+
                     case Message.Type.MonsterDied:
-                        monsterDied(newEvent.FieldObjectID);
+                        MonsterDied(newEvent.FieldObjectID);
                         break;
 
                     case Message.Type.NewGun:
                         newGun(newEvent.FieldObjectID, newEvent.FieldObjectType, newEvent.FieldObjectLevel, newEvent.FieldObjectNewPosition);
                         break;
+
                     case Message.Type.GunDied:
-                        gunDied(newEvent.FieldObjectID);
+                        GunDied(newEvent.FieldObjectID);
                         break;
 
                     case Message.Type.NewProjectile:
                         newProjectile(newEvent.FieldObjectID, newEvent.FieldObjectLevel, newEvent.FieldObjectNewPosition);
                         break;
+
                     case Message.Type.ProjectileMoved:
-                        projectileMoved(newEvent.FieldObjectID, newEvent.FieldObjectNewPosition);
+                        ProjectileMoved(newEvent.FieldObjectID, newEvent.FieldObjectNewPosition);
                         break;
+
                     case Message.Type.ProjectileHit:
-                        projectileHit(newEvent.FieldObjectID);
+                        ProjectileHit(newEvent.FieldObjectID);
                         break;
 
                     case Message.Type.Stop:
@@ -76,115 +86,112 @@ namespace MinimalTowerDefence
             }
         }
 
-        private Point coordinateTransformation(PolarCoordinates point)
+        private Point CoordinateTransformation(PolarCoordinates point)
         {
-            var r = point.R * radialScale;
+            var r = point.R * _radialScale;
 
-            return new Point(r * Math.Cos(point.φ) + width / 2, r * Math.Sin(point.φ) + height / 2);
+            return new Point(r * Math.Cos(point.φ) + _width / 2, r * Math.Sin(point.φ) + _height / 2);
         }
-
 
         /// <summary>
         /// Handles frame bitmap resize
         /// </summary>
-        private void resizeWritableBuffer(int width, int height)
+        private void ResizeWritableBuffer(int width, int height)
         {
-            updateCoordinates((double)width / (double)this.width, (double)height / (double)this.height);
+            UpdateCoordinates((double)width / (double)_width, (double)height / (double)_height);
 
-            this.width = width;
-            this.height = height;
-            radialScale = Math.Sqrt(width * width + height * height) / (MaxVisibleLogicRadius * 2.0);
+            _width = width;
+            _height = height;
+            _radialScale = Math.Sqrt(width * width + height * height) / (GameLogic.MaxVisibleLogicRadius * 2.0);
             InitializeSprites();
         }
-        
-        private void updateCoordinates(double widthScale, double heightScale)
+
+        private void UpdateCoordinates(double widthScale, double heightScale)
         {
-            updateCoordinates(guns, widthScale, heightScale);
-            updateCoordinates(monsters, widthScale, heightScale);
-            updateCoordinates(projectiles, widthScale, heightScale);
+            UpdateCoordinates(_guns, widthScale, heightScale);
+            UpdateCoordinates(_monsters, widthScale, heightScale);
+            UpdateCoordinates(_projectiles, widthScale, heightScale);
         }
 
         /// <summary>
         /// Updates screen coordinates of every fieldObject
         /// </summary>
-        private void updateCoordinates(Dictionary<long, FieldObject> objects, double widthScale, double heightScale)
+        private void UpdateCoordinates(Dictionary<long, FieldObject> objects, double widthScale, double heightScale)
         {
             foreach (var fieldObject in objects)
             {
-                fieldObject.Value.position.X *= widthScale;
-                fieldObject.Value.position.Y *= heightScale;
+                fieldObject.Value.Position.X *= widthScale;
+                fieldObject.Value.Position.Y *= heightScale;
             }
         }
 
-
-        private void render(IntPtr pBackBuffer)
+        private void Render(IntPtr pBackBuffer)
         {
-            renderFrame(pBackBuffer);
-            Application.Current.Dispatcher.BeginInvoke(new Action(gameFieldWindow.frameRendered));
+            RenderFrame(pBackBuffer);
+            Application.Current.Dispatcher.BeginInvoke(new Action(_gameFieldWindow.FrameRendered));
         }
 
-
-
-        private void laserFired(long fieldObjectID)
+        private void LaserFired(long fieldObjectID)
         {
-            Debug.Assert(guns.ContainsKey(fieldObjectID));
-            var gun = guns[fieldObjectID];
-            effects.AddLast(new Effect() { type = Effect.Type.Laser, ageFrames = 0, level = gun.level, position = gun.position });
+            Debug.Assert(_guns.ContainsKey(fieldObjectID));
+            var gun = _guns[fieldObjectID];
+            _effects.AddLast(new Effect() { EffectType = Effect.Type.Laser, AgeFrames = 0, Level = gun.Level, Position = gun.Position });
         }
 
-        private void mineBlow(long fieldObjectID)
+        private void MineBlow(long fieldObjectID)
         {
-            Debug.Assert(guns.ContainsKey(fieldObjectID));
-            var gun = guns[fieldObjectID];
-            guns.Remove(fieldObjectID);
-            effects.AddLast(new Effect() { type = Effect.Type.Exploison, ageFrames = 0, level = gun.level, position = gun.position });
+            Debug.Assert(_guns.ContainsKey(fieldObjectID));
+            var gun = _guns[fieldObjectID];
+            _guns.Remove(fieldObjectID);
+            _effects.AddLast(new Effect() { EffectType = Effect.Type.Exploison, AgeFrames = 0, Level = gun.Level, Position = gun.Position });
         }
 
-        private void monsterVomit(long fieldObjectID)
+        private void MonsterVomit(long fieldObjectID)
         {
-            Debug.Assert(monsters.ContainsKey(fieldObjectID));
-            var monster = monsters[fieldObjectID];
-            effects.AddLast(new Effect() { type = Effect.Type.Vomit, ageFrames = 0, position = monster.position });
+            Debug.Assert(_monsters.ContainsKey(fieldObjectID));
+            var monster = _monsters[fieldObjectID];
+            _effects.AddLast(new Effect() { EffectType = Effect.Type.Vomit, AgeFrames = 0, Position = monster.Position });
         }
 
-        private void newMonster(long fieldObjectID, int fieldObjectType, PolarCoordinates fieldObjectNewPosition)
+        private void NewMonster(long fieldObjectID, int fieldObjectType, PolarCoordinates fieldObjectNewPosition)
         {
-            monsters.Add(fieldObjectID, new FieldObject() { type = fieldObjectType, position = coordinateTransformation(fieldObjectNewPosition) });
+            _monsters.Add(fieldObjectID, new FieldObject() { ObjectType = fieldObjectType, Position = CoordinateTransformation(fieldObjectNewPosition) });
         }
 
-        private void monsterMoved(long fieldObjectID, PolarCoordinates fieldObjectNewPosition)
+        private void MonsterMoved(long fieldObjectID, PolarCoordinates fieldObjectNewPosition)
         {
-            monsters[fieldObjectID].position = coordinateTransformation(fieldObjectNewPosition);
+            _monsters[fieldObjectID].Position = CoordinateTransformation(fieldObjectNewPosition);
         }
 
-        private void monsterDied(long fieldObjectID)
+        private void MonsterDied(long fieldObjectID)
         {
-            monsters[fieldObjectID].dead = true;
+            _monsters[fieldObjectID].Dead = true;
         }
 
         private void newGun(long fieldObjectID, int fieldObjectType, int fieldObjectLevel, PolarCoordinates fieldObjectNewPosition)
         {
-            guns.Add(fieldObjectID, new FieldObject() { type = fieldObjectType, level = fieldObjectLevel, position = coordinateTransformation(fieldObjectNewPosition) });
+            _guns.Add(fieldObjectID, new FieldObject() { ObjectType = fieldObjectType, Level = fieldObjectLevel, Position = CoordinateTransformation(fieldObjectNewPosition) });
         }
 
-        private void gunDied(long fieldObjectID)
+        private void GunDied(long fieldObjectID)
         {
-            guns[fieldObjectID].dead = true;
+            _guns[fieldObjectID].Dead = true;
         }
 
         private void newProjectile(long fieldObjectID, int fieldObjectLevel, PolarCoordinates fieldObjectNewPosition)
         {
-            projectiles.Add(fieldObjectID, new FieldObject() { level = fieldObjectLevel, position = coordinateTransformation(fieldObjectNewPosition) });
+            _projectiles.Add(fieldObjectID, new FieldObject() { Level = fieldObjectLevel, Position = CoordinateTransformation(fieldObjectNewPosition) });
         }
 
-        private void projectileMoved(long fieldObjectID, PolarCoordinates fieldObjectNewPosition)
+        private void ProjectileMoved(long fieldObjectID, PolarCoordinates fieldObjectNewPosition)
         {
-            projectiles[fieldObjectID].position = coordinateTransformation(fieldObjectNewPosition);
+            _projectiles[fieldObjectID].Position = CoordinateTransformation(fieldObjectNewPosition);
         }
 
-        private void projectileHit(long fieldObjectID)
+        private void ProjectileHit(long fieldObjectID)
         {
-            projectiles.Remove(fieldObjectID); // projectiles die immediately
+            // Projectiles die immediately.
+            _projectiles.Remove(fieldObjectID);
         }
     }
 }

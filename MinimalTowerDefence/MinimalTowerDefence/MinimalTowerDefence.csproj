@@ -56,7 +56,10 @@
       <SubType>Designer</SubType>
     </ApplicationDefinition>
     <Compile Include="GameLogic\GameLogic.updates.cs" />
-    <Compile Include="GameObjects.cs" />
+    <Compile Include="GameObjects\PolarCoordinates.cs" />
+    <Compile Include="GameObjects\Projectile.cs" />
+    <Compile Include="GameObjects\Gun.cs" />
+    <Compile Include="GameObjects\Monster.cs" />
     <Compile Include="NullToVisibilityConverter.cs" />
     <Compile Include="Rendering\Renderer.cs" />
     <Compile Include="Rendering\Renderer.sprites.cs" />

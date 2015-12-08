@@ -1,4 +1,7 @@
-﻿using System;
+﻿// Copyright (c) Microsoft. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -10,9 +13,9 @@ namespace MinimalTowerDefence
     /// <summary>
     /// Renders game on WritableBitmap (unsafely)
     /// </summary>
-    partial class Renderer
+    internal partial class Renderer
     {
-        public struct Message 
+        public struct Message
         {
             public enum Type
             {
@@ -37,85 +40,90 @@ namespace MinimalTowerDefence
                 Stop,
             }
 
-            public Type type { get; private set; }
+            public Type MessageType { get; private set; }
 
             public int NewWidth { get; private set; }
+
             public int NewHeight { get; private set; }
+
             public IntPtr pBackBuffer { get; private set; }
 
             public long FieldObjectID { get; private set; }
+
             public PolarCoordinates FieldObjectNewPosition { get; private set; }
+
             public int FieldObjectLevel { get; private set; }
+
             public int FieldObjectType { get; private set; }
-            
+
             public static Message Resize(int newWidth, int newHeight)
             {
-                return new Message() { type = Type.Resize, NewWidth = newWidth, NewHeight = newHeight };
+                return new Message() { MessageType = Type.Resize, NewWidth = newWidth, NewHeight = newHeight };
             }
-            
+
             public static Message Render(IntPtr pBackBuffer)
             {
-                return new Message() { type = Type.Render, pBackBuffer = pBackBuffer };
+                return new Message() { MessageType = Type.Render, pBackBuffer = pBackBuffer };
             }
 
             internal static Message LaserFired(long gunID)
             {
-                return new Message() { type = Type.LaserFired, FieldObjectID = gunID };
+                return new Message() { MessageType = Type.LaserFired, FieldObjectID = gunID };
             }
 
             internal static Message MineBlow(long gunID)
             {
-                return new Message() { type = Type.MineBlow, FieldObjectID = gunID };
+                return new Message() { MessageType = Type.MineBlow, FieldObjectID = gunID };
             }
 
             internal static Message MonsterVomit(long monsterID)
             {
-                return new Message() { type = Type.MonsterVomit, FieldObjectID = monsterID };
+                return new Message() { MessageType = Type.MonsterVomit, FieldObjectID = monsterID };
             }
 
             internal static Message NewMonster(long ID, PolarCoordinates position, int type)
             {
-                return new Message() { type = Type.NewMonster, FieldObjectID = ID, FieldObjectType = type, FieldObjectNewPosition = position };
+                return new Message() { MessageType = Type.NewMonster, FieldObjectID = ID, FieldObjectType = type, FieldObjectNewPosition = position };
             }
 
             internal static Message MonsterMoved(long monsterID, PolarCoordinates position)
             {
-                return new Message() { type = Type.MonsterMoved, FieldObjectID = monsterID, FieldObjectNewPosition = position };
+                return new Message() { MessageType = Type.MonsterMoved, FieldObjectID = monsterID, FieldObjectNewPosition = position };
             }
 
             internal static Message MonsterDied(long monsterID)
             {
-                return new Message() { type = Type.MonsterDied, FieldObjectID = monsterID };
+                return new Message() { MessageType = Type.MonsterDied, FieldObjectID = monsterID };
             }
 
             internal static Message NewGun(long ID, PolarCoordinates position, int type, int level)
             {
-                return new Message() { type = Type.NewGun, FieldObjectID = ID, FieldObjectType = type, FieldObjectLevel = level, FieldObjectNewPosition = position };
+                return new Message() { MessageType = Type.NewGun, FieldObjectID = ID, FieldObjectType = type, FieldObjectLevel = level, FieldObjectNewPosition = position };
             }
 
             internal static Message GunDied(long gunID)
             {
-                return new Message() { type = Type.GunDied, FieldObjectID = gunID };
+                return new Message() { MessageType = Type.GunDied, FieldObjectID = gunID };
             }
 
             internal static Message NewProjectile(long ID, PolarCoordinates position, int level)
             {
-                return new Message() { type = Type.NewProjectile, FieldObjectID = ID, FieldObjectNewPosition = position, FieldObjectLevel = level };
+                return new Message() { MessageType = Type.NewProjectile, FieldObjectID = ID, FieldObjectNewPosition = position, FieldObjectLevel = level };
             }
 
             internal static Message ProjectileMoved(long projectileID, PolarCoordinates position)
             {
-                return new Message() { type = Type.ProjectileMoved, FieldObjectID = projectileID, FieldObjectNewPosition = position };
+                return new Message() { MessageType = Type.ProjectileMoved, FieldObjectID = projectileID, FieldObjectNewPosition = position };
             }
 
             internal static Message ProjectileHit(long projectileID)
             {
-                return new Message() { type = Type.ProjectileHit, FieldObjectID = projectileID };
+                return new Message() { MessageType = Type.ProjectileHit, FieldObjectID = projectileID };
             }
-            
+
             internal static Message Stop()
             {
-                return new Message() { type = Type.Stop };
+                return new Message() { MessageType = Type.Stop };
             }
         }
 
@@ -123,10 +131,6 @@ namespace MinimalTowerDefence
         /// Gun colors by type and level.
         /// </summary>
         public static readonly Color[,] GunColors;
-        /// <summary>
-        /// Maximal logic(!) radius that will be visible on screen.
-        /// </summary>
-        public static readonly double MaxVisibleLogicRadius = 100.0;
 
         static Renderer()
         {
@@ -158,21 +162,24 @@ namespace MinimalTowerDefence
         /// </summary>
         private class FieldObject
         {
-            public int type;
+            public int ObjectType;
+
             /// <summary>
             /// Level for guns and projectiles.
             /// </summary>
-            public int level;
+            public int Level;
+
             /// <summary>
             /// Screen position in usual (X, Y) coordinates.
             /// </summary>
-            public Point position;
+            public Point Position;
 
             /// <summary>
             /// Whether monster or gun died.
             /// </summary>
-            public bool dead;
-            public int framesSinceDeath;
+            public bool Dead;
+
+            public int FramesSinceDeath;
         }
 
         /// <summary>
@@ -180,86 +187,85 @@ namespace MinimalTowerDefence
         /// </summary>
         private class Effect
         {
-            public enum Type 
+            public enum Type
             {
                 Laser = 0,
                 Exploison = 1,
                 Vomit = 2
             }
 
-            public Type type;
-            public int ageFrames;
+            public Type EffectType;
+            public int AgeFrames;
+
             /// <summary>
             /// Screen position in usual (X, Y) coordinates.
             /// </summary>
-            public Point position;
+            public Point Position;
+
             /// <summary>
             /// Level for guns and projectiles.
             /// </summary>
-            public int level;
+            public int Level;
         }
 
-
-        private static readonly Int32 backgroundColor = (85 << 16) | (49 << 8) | (3 << 0);
-        private static readonly Int32 towerColor = (240 << 16) | (240 << 8) | (240 << 0);
+        private static readonly Int32 s_backgroundColor = (85 << 16) | (49 << 8) | (3 << 0);
+        private static readonly Int32 s_towerColor = (240 << 16) | (240 << 8) | (240 << 0);
 
         /// <summary>
         /// Number of frames for which corpses of dead guns and monsters will be drawn on screen.
         /// </summary>
-        private static readonly int DisplayCorpsesFramesCount = 10;
+        private static readonly int s_displayCorpsesFramesCount = 10;
+
         /// <summary>
         /// Number of frames for which effect of given type will appear on screen.
         /// </summary>
-        private static readonly int[] EffectFramesLength = new int[] { 3, 20, 3 };
+        private static readonly int[] s_effectFramesLength = new int[] { 3, 20, 3 };
 
+        public BlockingCollection<Message> MessageBox { get; private set; }
 
-        public BlockingCollection<Message> messageBox { get; private set; }
+        private GameField _gameFieldWindow;
 
-
-        private GameField gameFieldWindow;
         /// <summary>
         /// Size scale of pixel window size to game field size of game logic.
         /// </summary>
-        private double radialScale;
-        
-       
+        private double _radialScale;
 
-        private Dictionary<long, Renderer.FieldObject> guns = new Dictionary<long, Renderer.FieldObject>();
-        private Dictionary<long, Renderer.FieldObject> monsters = new Dictionary<long, Renderer.FieldObject>();
-        private Dictionary<long, Renderer.FieldObject> projectiles = new Dictionary<long, Renderer.FieldObject>();
-        private LinkedList<Effect> effects = new LinkedList<Effect>();
+        private Dictionary<long, Renderer.FieldObject> _guns = new Dictionary<long, Renderer.FieldObject>();
+        private Dictionary<long, Renderer.FieldObject> _monsters = new Dictionary<long, Renderer.FieldObject>();
+        private Dictionary<long, Renderer.FieldObject> _projectiles = new Dictionary<long, Renderer.FieldObject>();
+        private LinkedList<Effect> _effects = new LinkedList<Effect>();
 
         /// <summary>
         /// Frame bitmap width (in pixels)
         /// </summary>
-        private int width;
+        private int _width;
+
         /// <summary>
         /// Frame bitmap height (in pixels)
         /// </summary>
-        private int height;
+        private int _height;
 
         public Renderer(GameField gameFieldWindow)
         {
-            messageBox = new BlockingCollection<Message>();
-            this.gameFieldWindow = gameFieldWindow;
+            MessageBox = new BlockingCollection<Message>();
+            _gameFieldWindow = gameFieldWindow;
         }
 
-        private void renderFrame(IntPtr pBackBuffer)
+        private void RenderFrame(IntPtr pBackBuffer)
         {
             var start = DateTime.Now;
 
-            clear(pBackBuffer);
-            drawTower(pBackBuffer);
-            drawObjects(pBackBuffer, guns, drawGun);
-            drawObjects(pBackBuffer, projectiles, drawProjectile);
-            drawObjects(pBackBuffer, monsters, drawMonster);
-            drawEffects(pBackBuffer);  
+            Clear(pBackBuffer);
+            DrawTower(pBackBuffer);
+            DrawObjects(pBackBuffer, _guns, DrawGun);
+            DrawObjects(pBackBuffer, _projectiles, DrawProjectile);
+            DrawObjects(pBackBuffer, _monsters, DrawMonster);
+            DrawEffects(pBackBuffer);
 
             var time = (DateTime.Now - start).TotalMilliseconds;
-            if (time >= (1000 / 24) / 2) 
+            if (time >= (1000 / 24) / 2)
             {
                 Console.Error.WriteLine("Can't render in time. Rendering took {0}ms", time);
-                //Debug.Assert(false);
             }
         }
 
@@ -267,31 +273,35 @@ namespace MinimalTowerDefence
         /// Draws effects filtering out old ones.
         /// </summary>
         /// <param name="pBackBuffer"></param>
-        private void drawEffects(IntPtr pBackBuffer)
+        private void DrawEffects(IntPtr pBackBuffer)
         {
-            var currentEffect = effects.First;
+            var currentEffect = _effects.First;
             while (currentEffect != null)
             {
-                if (currentEffect.Value.ageFrames > EffectFramesLength[(int)currentEffect.Value.type])
+                if (currentEffect.Value.AgeFrames > s_effectFramesLength[(int)currentEffect.Value.EffectType])
                 {
                     var tmp = currentEffect.Next;
-                    effects.Remove(currentEffect);
+                    _effects.Remove(currentEffect);
                     currentEffect = tmp;
                     continue;
                 }
-                currentEffect.Value.ageFrames += 1;
 
-                switch (currentEffect.Value.type)
+                currentEffect.Value.AgeFrames += 1;
+
+                switch (currentEffect.Value.EffectType)
                 {
                     case Effect.Type.Laser:
-                        drawLaserRay(pBackBuffer, currentEffect.Value);
+                        DrawLaserRay(pBackBuffer, currentEffect.Value);
                         break;
+
                     case Effect.Type.Exploison:
-                        drawExploison(pBackBuffer, currentEffect.Value);
+                        DrawExploison(pBackBuffer, currentEffect.Value);
                         break;
+
                     case Effect.Type.Vomit:
-                        drawVomit(pBackBuffer, currentEffect.Value);
+                        DrawVomit(pBackBuffer, currentEffect.Value);
                         break;
+
                     default:
                         throw new NotImplementedException();
                 }
@@ -300,20 +310,20 @@ namespace MinimalTowerDefence
             }
         }
 
-        private unsafe void drawVomit(IntPtr pBackBuffer, Effect effect)
+        private unsafe void DrawVomit(IntPtr pBackBuffer, Effect effect)
         {
-            var radius = Monster.VomitingRadius * radialScale;
+            var radius = Monster.VomitingRadius * _radialScale;
             var r2 = radius * radius;
             var invSqrt2 = 1 / Math.Sqrt(2);
-            var xmin = Math.Max(0, (int)(effect.position.X - radius));
-            var xmax = Math.Min(width, (int)(effect.position.X + radius));
-            var ymin = Math.Max(0, (int)(effect.position.Y - radius));
-            var ymax = Math.Min(height, (int)(effect.position.Y + radius));
+            var xmin = Math.Max(0, (int)(effect.Position.X - radius));
+            var xmax = Math.Min(_width, (int)(effect.Position.X + radius));
+            var ymin = Math.Max(0, (int)(effect.Position.Y - radius));
+            var ymax = Math.Min(_height, (int)(effect.Position.Y + radius));
 
-            var directionToCenter = (new Point(width / 2, height / 2) - effect.position);
+            var directionToCenter = (new Point(_width / 2, _height / 2) - effect.Position);
             directionToCenter.Normalize();
 
-            int color = (102 / (effect.ageFrames + 1)) << 8 | (102 / (effect.ageFrames + 1)) << 0;
+            int color = (102 / (effect.AgeFrames + 1)) << 8 | (102 / (effect.AgeFrames + 1)) << 0;
 
             for (int x = xmin; x < xmax; ++x)
             {
@@ -321,13 +331,17 @@ namespace MinimalTowerDefence
                 {
                     var localX = x - xmin - radius;
                     var localY = y - ymin - radius;
-                    if (localX * localX + localY * localY < r2) // within radius from monster position
+
+                    // Within radius from monster position.
+                    if (localX * localX + localY * localY < r2)
                     {
-                        var direction = new Point(x, y) - effect.position;
+                        var direction = new Point(x, y) - effect.Position;
                         direction.Normalize();
-                        if (directionToCenter * direction > invSqrt2) // equivalent to condition that angle difference is less than π/4
+
+                        // Equivalent to condition that angle difference is less than π/4.
+                        if (directionToCenter * direction > invSqrt2)
                         {
-                            *((int*)(pBackBuffer + y * width * 4 + x * 4).ToPointer()) = color;
+                            *((int*)(pBackBuffer + y * _width * 4 + x * 4).ToPointer()) = color;
                         }
                     }
                 }
@@ -337,15 +351,15 @@ namespace MinimalTowerDefence
         /// <summary>
         /// Draws explosion circle
         /// </summary>
-        private unsafe void drawExploison(IntPtr pBackBuffer, Effect effect)
+        private unsafe void DrawExploison(IntPtr pBackBuffer, Effect effect)
         {
-            var radius = (Gun.ExplosionBaseRadius + Gun.ExplosionRadiusStep * effect.level) * radialScale;
-            var r2 = radius*radius;
-            var xmin = Math.Max(0, (int)(effect.position.X - radius));
-            var xmax = Math.Min(width, (int)(effect.position.X + radius));
-            var ymin = Math.Max(0, (int)(effect.position.Y - radius));
-            var ymax = Math.Min(height, (int)(effect.position.Y + radius));
-            int color = (64 + (255 - 64) / (effect.ageFrames + 1)) << 16;
+            var radius = (Gun.ExplosionBaseRadius + Gun.ExplosionRadiusStep * effect.Level) * _radialScale;
+            var r2 = radius * radius;
+            var xmin = Math.Max(0, (int)(effect.Position.X - radius));
+            var xmax = Math.Min(_width, (int)(effect.Position.X + radius));
+            var ymin = Math.Max(0, (int)(effect.Position.Y - radius));
+            var ymax = Math.Min(_height, (int)(effect.Position.Y + radius));
+            int color = (64 + (255 - 64) / (effect.AgeFrames + 1)) << 16;
 
             for (int x = xmin; x < xmax; ++x)
             {
@@ -355,38 +369,40 @@ namespace MinimalTowerDefence
                     var localY = y - ymin - radius;
                     if (localX * localX + localY * localY < r2)
                     {
-                        *((int*)(pBackBuffer + y * width * 4 + x * 4).ToPointer()) = color;
+                        *((int*)(pBackBuffer + y * _width * 4 + x * 4).ToPointer()) = color;
                     }
                 }
             }
         }
 
-        private void drawLaserRay(IntPtr pBackBuffer, Effect effect)
+        private void DrawLaserRay(IntPtr pBackBuffer, Effect effect)
         {
-            var h = height - 1;
-            var w = width - 1;
-            var x0 = effect.position.X;
-            var y0 = effect.position.Y;
-            var dx = x0 - w/2;
-            var dy = y0 - h/2;
+            var h = _height - 1;
+            var w = _width - 1;
+            var x0 = effect.Position.X;
+            var y0 = effect.Position.Y;
+            var dx = x0 - w / 2;
+            var dy = y0 - h / 2;
 
-            // Computing second lazer ray edge point
-            var scale = Math.Min(Math.Min(Math.Abs(x0 / dx), Math.Abs(y0 / dy)), Math.Min(Math.Abs((w - x0)/dx), Math.Abs((h - y0)/dy)));
+            // Computing second laser ray edge point.
+            var scale = Math.Min(Math.Min(Math.Abs(x0 / dx), Math.Abs(y0 / dy)), Math.Min(Math.Abs((w - x0) / dx), Math.Abs((h - y0) / dy)));
             var x1 = (int)(x0 + scale * dx);
             var y1 = (int)(y0 + scale * dy);
 
-            Debug.Assert(x1 >= 0 && x1 < width);
-            Debug.Assert(y1 >= 0 && y1 < height);
+            Debug.Assert(x1 >= 0 && x1 < _width);
+            Debug.Assert(y1 >= 0 && y1 < _height);
 
-            var color = (255 / (effect.ageFrames + 1)) << 8;
-            drawLine(pBackBuffer, (int)x0, (int)y0, x1, y1, color); // It's better to draw line with width depending on lazer ray radius,
-                                                                    // but algorithms for such line are too damn huge
+            var color = (255 / (effect.AgeFrames + 1)) << 8;
+
+            // It's better to draw line with width depending on laser ray radius,
+            // but algorithms for such line are too damn huge.
+            DrawLine(pBackBuffer, (int)x0, (int)y0, x1, y1, color);
         }
 
         /// <summary>
         /// Bresenham line algorithm. (thanks to http://habrahabr.ru/post/248153/)
         /// </summary>
-        void drawLine(IntPtr pBackBuffer, int x0, int y0, int x1, int y1, int color)
+        private void DrawLine(IntPtr pBackBuffer, int x0, int y0, int x1, int y1, int color)
         {
             bool steep = false;
             if (Math.Abs(x0 - x1) < Math.Abs(y0 - y1))
@@ -395,11 +411,13 @@ namespace MinimalTowerDefence
                 Swap(ref x1, ref y1);
                 steep = true;
             }
+
             if (x0 > x1)
             {
                 Swap(ref x0, ref x1);
                 Swap(ref y0, ref y1);
             }
+
             int dx = x1 - x0;
             int dy = y1 - y0;
             int derror2 = Math.Abs(dy) * 2;
@@ -409,12 +427,13 @@ namespace MinimalTowerDefence
             {
                 if (steep)
                 {
-                    setPixel(pBackBuffer, y, x, color);
+                    SetPixel(pBackBuffer, y, x, color);
                 }
                 else
                 {
-                    setPixel(pBackBuffer, x, y, color);
+                    SetPixel(pBackBuffer, x, y, color);
                 }
+
                 error2 += derror2;
 
                 if (error2 > dx)
@@ -425,9 +444,9 @@ namespace MinimalTowerDefence
             }
         }
 
-        private unsafe void setPixel(IntPtr pBackBuffer, int x, int y, int color)
+        private unsafe void SetPixel(IntPtr pBackBuffer, int x, int y, int color)
         {
-            pBackBuffer += y * width * 4 + x * 4;
+            pBackBuffer += y * _width * 4 + x * 4;
             *((int*)pBackBuffer.ToPointer()) = color;
         }
 
@@ -438,32 +457,34 @@ namespace MinimalTowerDefence
             b = t;
         }
 
-        private void drawTower(IntPtr pBackBuffer)
+        private void DrawTower(IntPtr pBackBuffer)
         {
-            int diameter = towerSpriteDiameter;
+            int diameter = _towerSpriteDiameter;
             var radius = diameter / 2;
-            var centerX = width / 2;
-            var centerY = height / 2;
-            writePixels(pBackBuffer, towerSprite, diameter, (int)centerX - radius, (int)centerY - radius);
+            var centerX = _width / 2;
+            var centerY = _height / 2;
+            WritePixels(pBackBuffer, _towerSprite, diameter, (int)centerX - radius, (int)centerY - radius);
         }
 
         /// <summary>
         /// Common method for drawing every field object.
         /// </summary>
-        private void drawObjects(IntPtr pBackBuffer, Dictionary<long, FieldObject> objects, Action<IntPtr, FieldObject> drawObject)
+        private void DrawObjects(IntPtr pBackBuffer, Dictionary<long, FieldObject> objects, Action<IntPtr, FieldObject> drawObject)
         {
             var deadObjects = new List<long>();
-            foreach (var fieldObject in objects) 
+            foreach (var fieldObject in objects)
             {
-                if (fieldObject.Value.dead)
+                if (fieldObject.Value.Dead)
                 {
-                    if (fieldObject.Value.framesSinceDeath > DisplayCorpsesFramesCount)
+                    if (fieldObject.Value.FramesSinceDeath > s_displayCorpsesFramesCount)
                     {
                         deadObjects.Add(fieldObject.Key);
                         continue;
                     }
-                    fieldObject.Value.framesSinceDeath += 1;
+
+                    fieldObject.Value.FramesSinceDeath += 1;
                 }
+
                 drawObject(pBackBuffer, fieldObject.Value);
             }
 
@@ -473,72 +494,72 @@ namespace MinimalTowerDefence
             }
         }
 
-        private void drawGun(IntPtr pBackBuffer, FieldObject gun)
+        private void DrawGun(IntPtr pBackBuffer, FieldObject gun)
         {
-            int diameter = gunSpriteDiameter;
-            var radius = gunSpriteDiameter / 2;
-            if (gun.dead)
+            int diameter = _gunSpriteDiameter;
+            var radius = _gunSpriteDiameter / 2;
+            if (gun.Dead)
             {
-                writePixels(pBackBuffer, deadGunSprite, diameter,
-                    (int)gun.position.X - radius, (int)gun.position.Y - radius);
+                WritePixels(pBackBuffer, _deadGunSprite, diameter,
+                    (int)gun.Position.X - radius, (int)gun.Position.Y - radius);
             }
             else
             {
-                writePixels(pBackBuffer, gunSprites[gun.type, gun.level], diameter,
-                    (int)gun.position.X - radius, (int)gun.position.Y - radius);
+                WritePixels(pBackBuffer, _gunSprites[gun.ObjectType, gun.Level], diameter,
+                    (int)gun.Position.X - radius, (int)gun.Position.Y - radius);
             }
         }
 
-        private void drawProjectile(IntPtr pBackBuffer, FieldObject projectile)
+        private void DrawProjectile(IntPtr pBackBuffer, FieldObject projectile)
         {
-            int diameter = projectileSpriteDiameters[projectile.level];
+            int diameter = _projectileSpriteDiameters[projectile.Level];
             var radius = diameter / 2;
-            var x = (int)projectile.position.X - radius; 
-            var y = (int)projectile.position.Y - radius;
-            if (projectile.dead)
+            var x = (int)projectile.Position.X - radius;
+            var y = (int)projectile.Position.Y - radius;
+            if (projectile.Dead)
             {
                 throw new InvalidOperationException();
             }
             else
             {
-                writePixels(pBackBuffer, projectileSprites[projectile.level], diameter, x, y);
+                WritePixels(pBackBuffer, _projectileSprites[projectile.Level], diameter, x, y);
             }
         }
 
-        private void drawMonster(IntPtr pBackBuffer, FieldObject monster)
+        private void DrawMonster(IntPtr pBackBuffer, FieldObject monster)
         {
-            int diameter = monsterSpriteDiameters[monster.type];
+            int diameter = _monsterSpriteDiameters[monster.ObjectType];
             var radius = diameter / 2;
-            var x = (int)monster.position.X - radius;
-            var y = (int)monster.position.Y - radius;
-            if (monster.dead) 
+            var x = (int)monster.Position.X - radius;
+            var y = (int)monster.Position.Y - radius;
+            if (monster.Dead)
             {
-                writePixels(pBackBuffer, deadMonsterSprites[monster.type], diameter, x, y);
+                WritePixels(pBackBuffer, _deadMonsterSprites[monster.ObjectType], diameter, x, y);
             }
             else
             {
-                writePixels(pBackBuffer, monsterSprites[monster.type], diameter, x, y);
+                WritePixels(pBackBuffer, _monsterSprites[monster.ObjectType], diameter, x, y);
             }
         }
 
         /// <summary>
         /// Writes pixels from sprite on bitmap omitting ones that have background color.
         /// </summary>
-        private unsafe void writePixels(IntPtr pBackBuffer, Int32[] sprite, int diameter, int x, int y)
+        private unsafe void WritePixels(IntPtr pBackBuffer, Int32[] sprite, int diameter, int x, int y)
         {
             var xmin = Math.Max(0, x);
-            var xmax = Math.Min(width, x + diameter);
+            var xmax = Math.Min(_width, x + diameter);
 
             var ymin = Math.Max(0, y);
-            var ymax = Math.Min(height, y + diameter);
+            var ymax = Math.Min(_height, y + diameter);
 
             for (x = xmin; x < xmax; ++x)
             {
                 for (y = ymin; y < ymax; ++y)
                 {
-                    var color = sprite[(y - ymin)*diameter + (x - xmin)];
-                    if (color == backgroundColor) continue;
-                    *((int*)(pBackBuffer + y * width * 4 + x * 4).ToPointer()) = color;
+                    var color = sprite[(y - ymin) * diameter + (x - xmin)];
+                    if (color == s_backgroundColor) continue;
+                    *((int*)(pBackBuffer + y * _width * 4 + x * 4).ToPointer()) = color;
                 }
             }
         }
@@ -546,15 +567,13 @@ namespace MinimalTowerDefence
         /// <summary>
         /// Clears bitmap with background color
         /// </summary>
-        private unsafe void clear(IntPtr pBackBuffer)
+        private unsafe void Clear(IntPtr pBackBuffer)
         {
-            for (int i = 0; i < width * height; ++i)
+            for (int i = 0; i < _width * _height; ++i)
             {
-                *((int*)pBackBuffer.ToPointer()) = backgroundColor;
+                *((int*)pBackBuffer.ToPointer()) = s_backgroundColor;
                 pBackBuffer += 4;
             }
-
         }
-
     }
 }

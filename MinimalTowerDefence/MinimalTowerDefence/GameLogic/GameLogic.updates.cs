@@ -3,78 +3,79 @@ using System.Windows;
 
 namespace MinimalTowerDefence
 {
-    partial class GameLogic
+    internal partial class GameLogic
     {
-        private void laserFired(long gunID)
+        private void LaserFired(long gunID)
         {
-            renderer.messageBox.Add(Renderer.Message.LaserFired(gunID));
+            _renderer.MessageBox.Add(Renderer.Message.LaserFired(gunID));
         }
 
-        private void mineBlown(long gunID)
+        private void MineBlown(long gunID)
         {
-            renderer.messageBox.Add(Renderer.Message.MineBlow(gunID));
+            _renderer.MessageBox.Add(Renderer.Message.MineBlow(gunID));
         }
 
-        private void vomit(long monsterID)
+        private void Vomit(long monsterID)
         {
-            renderer.messageBox.Add(Renderer.Message.MonsterVomit(monsterID));
+            _renderer.MessageBox.Add(Renderer.Message.MonsterVomit(monsterID));
         }
 
-        private void newMonster(Monster monster)
+        private void NewMonster(Monster monster)
         {
-            renderer.messageBox.Add(Renderer.Message.NewMonster(monster.ID, monster.Position, (int)monster.type));
+            _renderer.MessageBox.Add(Renderer.Message.NewMonster(monster.ID, monster.Position, (int)monster.MonsterType));
         }
 
-        private void monsterMoved(long monsterID, PolarCoordinates position)
+        private void MonsterMoved(long monsterID, PolarCoordinates position)
         {
-            renderer.messageBox.Add(Renderer.Message.MonsterMoved(monsterID, position));
+            _renderer.MessageBox.Add(Renderer.Message.MonsterMoved(monsterID, position));
         }
 
-        private void monsterDied(long monsterID, Monster.Type monsterType, bool addMoney)
+        private void MonsterDied(long monsterID, Monster.Type monsterType, bool addMoney)
         {
-            monstersAlive -= 1;
-            if (addMoney) playerMoney += 200 * (int)(monsterType + 1);
-            renderer.messageBox.Add(Renderer.Message.MonsterDied(monsterID));
+            _monstersAlive -= 1;
+            if (addMoney) _playerMoney += 200 * (int)(monsterType + 1);
+            _renderer.MessageBox.Add(Renderer.Message.MonsterDied(monsterID));
         }
 
-        private void newGun(Gun gun)
+        private void NewGun(Gun gun)
         {
-            renderer.messageBox.Add(Renderer.Message.NewGun(gun.ID, gun.Position, (int)gun.type, gun.Level));
-            Application.Current.Dispatcher.BeginInvoke(new Action(gameFieldWindow.gunAdded));
+            _renderer.MessageBox.Add(Renderer.Message.NewGun(gun.ID, gun.Position, (int)gun.GunType, gun.Level));
+            Application.Current.Dispatcher.BeginInvoke(new Action(_gameFieldWindow.GunAdded));
         }
 
-        private void gunDied(long gunID)
+        private void GunDied(long gunID)
         {
-            renderer.messageBox.Add(Renderer.Message.GunDied(gunID));
+            _renderer.MessageBox.Add(Renderer.Message.GunDied(gunID));
         }
 
-        private void newProjectile(Projectile projectile)
+        private void NewProjectile(Projectile projectile)
         {
-            renderer.messageBox.Add(Renderer.Message.NewProjectile(projectile.ID, projectile.Position, projectile.Level));
+            _renderer.MessageBox.Add(Renderer.Message.NewProjectile(projectile.ID, projectile.Position, projectile.Level));
         }
 
-        private void projectileMoved(long projectileID, PolarCoordinates position)
+        private void ProjectileMoved(long projectileID, PolarCoordinates position)
         {
-            renderer.messageBox.Add(Renderer.Message.ProjectileMoved(projectileID, position));
+            _renderer.MessageBox.Add(Renderer.Message.ProjectileMoved(projectileID, position));
         }
 
-        private void projectileHit(long projectileID)
+        private void ProjectileHit(long projectileID)
         {
-            renderer.messageBox.Add(Renderer.Message.ProjectileHit(projectileID));
+            _renderer.MessageBox.Add(Renderer.Message.ProjectileHit(projectileID));
         }
 
-        private void playerMoneyChanged()
+        private void PlayerMoneyChanged()
         {
-            try // try-catch should be everywhere, but this is the most frequent where game crashes on exit
+            // Try-catch should be everywhere, but this is the most frequent where game crashes on exit.
+            try
             {
-                Application.Current.Dispatcher.BeginInvoke(new Action<long>(gameFieldWindow.setPlayerMoney), playerMoney);
+                Application.Current.Dispatcher.BeginInvoke(new Action<long>(_gameFieldWindow.SetPlayerMoney), _playerMoney);
             }
             catch (NullReferenceException) { }
         }
 
-        private void towerLifuChanged()
+        private void TowerLifuChanged()
         {
-            Application.Current.Dispatcher.BeginInvoke(new Action<long>(gameFieldWindow.setTowerLifu), (long)towerLifu);
+            Application.Current.Dispatcher.BeginInvoke(new Action<long>(_gameFieldWindow.SetTowerLifu), (long)_towerLifu);
         }
     }
 }
