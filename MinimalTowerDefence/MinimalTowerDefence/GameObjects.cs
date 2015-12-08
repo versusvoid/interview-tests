@@ -151,7 +151,7 @@ namespace MinimalTowerDefence
         /// </summary>
         public static readonly double LaserRayWidthStep = 0.2;
         /// <summary>
-        /// Attack power of lazer ray.
+        /// Attack power of laser ray.
         /// </summary>
         public static readonly double BaseLaserPower = 40;
 
@@ -170,7 +170,7 @@ namespace MinimalTowerDefence
     /// <summary>
     /// Class representing game projectile fired by Machine type gun.
     /// </summary>
-    struct Projectile
+    class Projectile
     {
         /// <summary>
         /// Unique (for period of existence at least) identificator.
