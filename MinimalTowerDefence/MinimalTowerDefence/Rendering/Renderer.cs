@@ -2,20 +2,15 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 
 namespace MinimalTowerDefence
 {
     /// <summary>
     /// Renders game on WritableBitmap (unsafely)
     /// </summary>
-    class Renderer
+    partial class Renderer
     {
         public struct Message 
         {
@@ -209,11 +204,11 @@ namespace MinimalTowerDefence
         private static readonly Int32 towerColor = (240 << 16) | (240 << 8) | (240 << 0);
 
         /// <summary>
-        /// Number of frames for wich corpses of dead guns and monsters will be drawn on screen.
+        /// Number of frames for which corpses of dead guns and monsters will be drawn on screen.
         /// </summary>
         private static readonly int DisplayCorpsesFramesCount = 10;
         /// <summary>
-        /// Number of frames for wich effect of given type will appear on screen.
+        /// Number of frames for which effect of given type will appear on screen.
         /// </summary>
         private static readonly int[] EffectFramesLength = new int[] { 3, 20, 3 };
 
@@ -227,43 +222,12 @@ namespace MinimalTowerDefence
         /// </summary>
         private double radialScale;
         
-        /// <summary>
-        /// BGR32 data of tower sprite.
-        /// </summary>
-        private Int32[] towerSprite;
-        private int towerSpriteDiameter;
-
-        /// <summary>
-        /// BGR32 data of gun sprites for every type and level.
-        /// </summary>
-        private Int32[,][] gunSprites;
-        /// <summary>
-        /// BGR32 data of dead gun sprite. The same for all gun types and levels.
-        /// </summary>
-        private Int32[] deadGunSprite;
-        private int gunSpriteDiameter;
-
-        /// <summary>
-        /// BGR32 data of projectile sprites for every level.
-        /// </summary>
-        private Int32[][] projectileSprites;
-        private int[] projectileSpriteDiameters;
-
-        /// <summary>
-        /// BGR32 data of monster sprites for every type.
-        /// </summary>
-        private Int32[][] monsterSprites;
-        /// <summary>
-        /// BGR32 data of dead monster sprites for every type.
-        /// </summary>
-        private Int32[][] deadMonsterSprites;
-        private int[] monsterSpriteDiameters;
+       
 
         private Dictionary<long, Renderer.FieldObject> guns = new Dictionary<long, Renderer.FieldObject>();
         private Dictionary<long, Renderer.FieldObject> monsters = new Dictionary<long, Renderer.FieldObject>();
         private Dictionary<long, Renderer.FieldObject> projectiles = new Dictionary<long, Renderer.FieldObject>();
         private LinkedList<Effect> effects = new LinkedList<Effect>();
-        public GameLogic gameLogic { get; set; }
 
         /// <summary>
         /// Frame bitmap width (in pixels)
@@ -278,175 +242,6 @@ namespace MinimalTowerDefence
         {
             messageBox = new BlockingCollection<Message>();
             this.gameFieldWindow = gameFieldWindow;
-        }
-
-        private void InitializeSprites()
-        {
-            InitializeTowerSprite();
-            InitializeGunSprites();
-            InitializeProjectileSprites();
-            InitializeMonsterSprites();
-        }
-
-        private void InitializeProjectileSprites()
-        {
-            projectileSprites = new Int32[Gun.NumLevels][];
-            projectileSpriteDiameters = new int[Gun.NumLevels];
-
-            var colorIntesityStep = 255 / Gun.NumLevels;
-            
-            for (int level = 0; level < Gun.NumLevels; ++level)
-            {
-                projectileSprites[level] = CirleSprite(Projectile.BaseRadius + Projectile.LevelRadiusStep*(level + 1), 
-                    ((level + 1) * colorIntesityStep) << (8 * ((int)Gun.Type.Machine)), out projectileSpriteDiameters[level]);
-            }
-        }
-
-        private void InitializeMonsterSprites()
-        {
-            monsterSprites = new Int32[3][];
-            deadMonsterSprites = new Int32[3][];
-            monsterSpriteDiameters = new int[3];
-            int[] colors = { (255 << 16) | (255 << 8), (255 << 16) | (255 << 0) , (255 << 8) | (255 << 0) };
-            for (int type = 0; type < 3; ++type)
-            {
-                int diameter = 2 * (int)(radialScale * Monster.Radius[type]);
-                monsterSpriteDiameters[type] = diameter;
-                monsterSprites[type] = new Int32[diameter * diameter];
-                deadMonsterSprites[type] = new Int32[diameter * diameter];
-
-                for (int i = 0; i < diameter * diameter; ++i)
-                {
-                    monsterSprites[type][i] = colors[type];
-                    deadMonsterSprites[type][i] = (24 << 16) | (24 << 8) | (24 << 0);
-                }
-            }
-        }
-
-        private void InitializeGunSprites()
-        {
-            gunSprites = new Int32[3, Gun.NumLevels][];
-
-            for (int type = 0; type < 3; ++type)
-            { 
-                for (int level = 0; level < Gun.NumLevels; ++level)
-                {
-                    gunSprites[type, level] = CirleSprite(Gun.Radius,
-                        (GunColors[type, level].R << 16) | (GunColors[type, level].G << 8) | (GunColors[type, level].B << 0), 
-                        out gunSpriteDiameter);
-                }
-            }
-
-            deadGunSprite = CirleSprite(Gun.Radius, (24 << 16) | (24 << 8) | (24 << 0), out gunSpriteDiameter);
-        }
-
-        private void InitializeTowerSprite()
-        {
-            towerSprite = CirleSprite(GameLogic.TowerRadius, towerColor, out towerSpriteDiameter);
-        }
-
-        private Int32[] CirleSprite(double objectRadius, Int32 color, out int diameter)
-        {
-            int radius = (int)(radialScale * objectRadius);
-            diameter = 2 * radius;
-            var sprite = new Int32[diameter * diameter];
-            int colored = 0;
-            for (int x = 0; x < diameter; ++x)
-            {
-                for (int y = 0; y < diameter; ++y)
-                {
-                    if (Math.Sqrt((x - radius) * (x - radius) + (y - radius) * (y - radius)) < radius)
-                    {
-                        colored += 1;
-                        sprite[y * diameter + x] = color;
-                    }
-                    else
-                    {
-                        sprite[y * diameter + x] = backgroundColor;
-                    }
-                }
-            }
-
-            return sprite;
-        }
-
-        internal void run(object sender, System.ComponentModel.DoWorkEventArgs e)
-        {
-            while (true)
-            {
-                var newEvent = messageBox.Take();
-                switch (newEvent.type)
-                {
-                    // Global events
-                    case Message.Type.Resize:
-                        resizeWritableBuffer(newEvent.NewWidth, newEvent.NewHeight);
-                        break;
-                    case Message.Type.Render:
-                        renderFrame(newEvent.pBackBuffer);
-                        gameLogic.MessageBox.Add(GameLogic.Message.ContinueSimulation());
-                        Application.Current.Dispatcher.BeginInvoke(new Action(gameFieldWindow.frameRendered));
-                        break;
-
-                    // Effects-related events
-                    case Message.Type.LaserFired:
-                        Debug.Assert(guns.ContainsKey(newEvent.FieldObjectID));
-                        var gun = guns[newEvent.FieldObjectID];
-                        effects.AddLast(new Effect() { type = Effect.Type.Laser, ageFrames = 0, level = gun.level, position = gun.position });
-                        break;
-                    case Message.Type.MineBlow:
-                        Debug.Assert(guns.ContainsKey(newEvent.FieldObjectID));
-                        gun = guns[newEvent.FieldObjectID];
-                        guns.Remove(newEvent.FieldObjectID);
-                        effects.AddLast(new Effect() { type = Effect.Type.Exploison, ageFrames = 0, level = gun.level, position = gun.position });
-                        break;
-                    case Message.Type.MonsterVomit:
-                        Debug.Assert(monsters.ContainsKey(newEvent.FieldObjectID));
-                        var monster = monsters[newEvent.FieldObjectID];
-                        effects.AddLast(new Effect() { type = Effect.Type.Vomit, ageFrames = 0, position = monster.position });
-                        break;
-
-                    // Field objects-related events
-                    case Message.Type.NewMonster:
-                        monsters.Add(newEvent.FieldObjectID, new FieldObject() { type = newEvent.FieldObjectType, position = coordinateTransformation(newEvent.FieldObjectNewPosition) });
-                        break;
-                    case Message.Type.MonsterMoved:
-                        monsters[newEvent.FieldObjectID].position = coordinateTransformation(newEvent.FieldObjectNewPosition);
-                        break;
-                    case Message.Type.MonsterDied:
-                        monsters[newEvent.FieldObjectID].dead = true;
-                        break;
-
-                    case Message.Type.NewGun:
-                        guns.Add(newEvent.FieldObjectID, new FieldObject() { type = newEvent.FieldObjectType, level = newEvent.FieldObjectLevel, position = coordinateTransformation(newEvent.FieldObjectNewPosition) });
-                        break;
-                    case Message.Type.GunDied:
-                        guns[newEvent.FieldObjectID].dead = true;
-                        break;
-
-                    case Message.Type.NewProjectile:
-                        projectiles.Add(newEvent.FieldObjectID, new FieldObject() { level = newEvent.FieldObjectLevel, position = coordinateTransformation(newEvent.FieldObjectNewPosition) });
-                        break;
-                    case Message.Type.ProjectileMoved:
-                        projectiles[newEvent.FieldObjectID].position = coordinateTransformation(newEvent.FieldObjectNewPosition);
-                        break;
-                    case Message.Type.ProjectileHit:
-                        projectiles.Remove(newEvent.FieldObjectID); // projectiles die immediately
-                        break;
-
-                    case Message.Type.Stop:
-                        return;
-
-                    default:
-                        throw new NotImplementedException();
-                }
-            }
-        }
-
-        private Point coordinateTransformation(PolarCoordinates point)
-        {
-            var r = point.R * radialScale;
-
-            return new Point(r * Math.Cos(point.φ) + width/2, r * Math.Sin(point.φ) + height/2);
         }
 
         private void renderFrame(IntPtr pBackBuffer)
@@ -540,7 +335,7 @@ namespace MinimalTowerDefence
         }
 
         /// <summary>
-        /// Draws exploision circle
+        /// Draws explosion circle
         /// </summary>
         private unsafe void drawExploison(IntPtr pBackBuffer, Effect effect)
         {
@@ -671,6 +466,11 @@ namespace MinimalTowerDefence
                 }
                 drawObject(pBackBuffer, fieldObject.Value);
             }
+
+            foreach (var id in deadObjects)
+            {
+                objects.Remove(id);
+            }
         }
 
         private void drawGun(IntPtr pBackBuffer, FieldObject gun)
@@ -722,7 +522,7 @@ namespace MinimalTowerDefence
         }
 
         /// <summary>
-        /// Wrties pixels from sprite on bitmap omiting ones that have backgound color.
+        /// Writes pixels from sprite on bitmap omitting ones that have background color.
         /// </summary>
         private unsafe void writePixels(IntPtr pBackBuffer, Int32[] sprite, int diameter, int x, int y)
         {
@@ -755,39 +555,6 @@ namespace MinimalTowerDefence
             }
 
         }
-
-        /// <summary>
-        /// Handles frame bitmap resize
-        /// </summary>
-        private void resizeWritableBuffer(int width, int height)
-        {
-            updateCoordinates((double)width / (double)this.width, (double)height / (double)this.height);
-            
-            this.width = width;
-            this.height = height;
-            radialScale = Math.Sqrt(width * width + height * height) / (MaxVisibleLogicRadius * 2.0);
-            InitializeSprites();
-        }
-
-        private void updateCoordinates(double widthScale, double heightScale)
-        {
-            updateCoordinates(guns, widthScale, heightScale);
-            updateCoordinates(monsters, widthScale, heightScale);
-            updateCoordinates(projectiles, widthScale, heightScale);
-        }
-
-        /// <summary>
-        /// Updates screen coordinates of every fieldObject
-        /// </summary>
-        private void updateCoordinates(Dictionary<long, FieldObject> objects, double widthScale, double heightScale)
-        {
-            foreach (var fieldObject in objects)
-            {
-                fieldObject.Value.position.X *= widthScale;
-                fieldObject.Value.position.Y *= heightScale;
-            }
-        }
-
 
     }
 }

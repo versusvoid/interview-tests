@@ -112,6 +112,8 @@ namespace MinimalTowerDefence
             init();
         }
 
+
+
         private void initGunShop()
         {
             mineSelector.ItemsSource = initSelector(Gun.Type.Mine);
@@ -143,7 +145,6 @@ namespace MinimalTowerDefence
         {
             renderer = new Renderer(this);
             logic = new GameLogic(this, renderer);
-            renderer.gameLogic = logic;
 
             if (contentGrid.ActualWidth > 0)
                 reinitFieldBitmap((int)contentGrid.ActualWidth, (int)contentGrid.ActualHeight);
@@ -155,6 +156,7 @@ namespace MinimalTowerDefence
             renderWorker.RunWorkerCompleted += rendererStopped;
             renderWorker.WorkerSupportsCancellation = true;
             renderWorker.RunWorkerAsync();
+
             renderFrameTimer.Start();
         }
 
@@ -168,10 +170,12 @@ namespace MinimalTowerDefence
         }
 
         /// <summary>
-        /// Called (remotely) by rendering thread, when it finishs new frame.
+        /// Called (remotely) by rendering thread, when it finishes new frame.
         /// </summary>
         internal void frameRendered()
         {
+            logic.MessageBox.Add(GameLogic.Message.ContinueSimulation());
+
             writeableBitmap.AddDirtyRect(new Int32Rect(0, 0, (int)writeableBitmap.Width, (int)writeableBitmap.Height));          
             writeableBitmap.Unlock();
         }

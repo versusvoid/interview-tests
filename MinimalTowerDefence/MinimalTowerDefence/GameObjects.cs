@@ -3,6 +3,9 @@ using System;
 using System.Windows;
 namespace MinimalTowerDefence
 {
+    /// <summary>
+    /// Logical polar coordinates of any game object.
+    /// </summary>
     struct PolarCoordinates
     {
         public double R { get; set; }
@@ -42,7 +45,7 @@ namespace MinimalTowerDefence
         }
 
         /// <summary>
-        /// Uniqe (for period of existence at least) identificator.
+        /// Unique (for period of existence at least) identificator.
         /// </summary>
         public readonly long ID;
         public readonly Type type;
@@ -97,7 +100,7 @@ namespace MinimalTowerDefence
         }
 
         /// <summary>
-        /// Uniqe (for period of existence at least) identificator.
+        /// Unique (for period of existence at least) identificator.
         /// </summary>
         public readonly long ID;
         public readonly Type type;
@@ -127,15 +130,15 @@ namespace MinimalTowerDefence
         public static readonly double Radius = 1.5;
 
         /// <summary>
-        /// Radius of Mine exploision on level 0.
+        /// Radius of Mine explosion on level 0.
         /// </summary>
         public static readonly double ExplosionBaseRadius = 1.7;
         /// <summary>
-        /// Step of exploision radius enlargement on every level.
+        /// Step of explosion radius enlargement on every level.
         /// </summary>
         public static readonly double ExplosionRadiusStep = 1;
         /// <summary>
-        /// Attack power of exploision.
+        /// Attack power of explosion.
         /// </summary>
         public static readonly double ExplosionPower = 130;
         
@@ -170,7 +173,7 @@ namespace MinimalTowerDefence
     struct Projectile
     {
         /// <summary>
-        /// Uniqe (for period of existence at least) identificator.
+        /// Unique (for period of existence at least) identificator.
         /// </summary>
         public readonly long ID;
         /// <summary>
