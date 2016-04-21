@@ -69,7 +69,7 @@ private:
     double width;
     double height;
     std::size_t dragged;
-    std::thread t;
+    std::thread workerThread;
 
     void run();
     void updateParticles();
