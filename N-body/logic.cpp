@@ -37,13 +37,13 @@ void Logic::start(int width, int height)
         p.y = dis_y(gen);
     }
 
-    t = std::thread(&Logic::run, this);
+    workerThread = std::thread(&Logic::run, this);
 }
 
 void Logic::finish()
 {
     messageQueue.push(Message(Message::Type::Stop));
-    t.join();
+    workerThread.join();
 }
 
 void Logic::updateParticles()
